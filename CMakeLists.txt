@@ -48,3 +48,10 @@ else()
 endif()
 
 target_link_libraries(${GAME_LINKED} ace)
+
+convertFont(
+       TARGET ${GAME_LINKED}
+       FIRST_CHAR 32
+       SOURCE ${PROJECT_SOURCE_DIR}/resources/GUI/font.png
+       DESTINATION ${PROJECT_BINARY_DIR}/font.fnt
+)
