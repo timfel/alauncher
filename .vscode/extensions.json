@@ -1,0 +1,7 @@
+{
+	"recommendations": [
+		"BartmanAbyss.amiga-debug",
+		"ms-vscode.cpptools",
+		"ms-vscode.cmake-tools"
+	]
+}

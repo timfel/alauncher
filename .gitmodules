@@ -1,0 +1,6 @@
+[submodule "deps/ACE"]
+	path = deps/ACE
+	url = https://github.com/AmigaPorts/ACE
+[submodule "deps/AmigaCMakeCrossToolchains"]
+	path = deps/AmigaCMakeCrossToolchains
+	url = https://github.com/AmigaPorts/AmigaCMakeCrossToolchains
