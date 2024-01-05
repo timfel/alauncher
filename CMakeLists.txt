@@ -51,7 +51,13 @@ target_link_libraries(${GAME_LINKED} ace)
 
 convertFont(
        TARGET ${GAME_LINKED}
-       FIRST_CHAR 32
-       SOURCE ${PROJECT_SOURCE_DIR}/resources/GUI/font.png
+       FIRST_CHAR 31
+       SOURCE ${PROJECT_SOURCE_DIR}/resources/font.png
        DESTINATION ${PROJECT_BINARY_DIR}/font.fnt
+)
+
+file(
+  WRITE ${PROJECT_BINARY_DIR}/acelauncher.config
+  "Die Siedler\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Workbench\nloadwb\ndefault\n"
 )
