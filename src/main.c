@@ -5,6 +5,7 @@
 #include <ace/managers/state.h>
 #include <ace/managers/log.h>
 #include <ace/managers/viewport/simplebuffer.h>
+#include <ace/managers/sprite.h>
 #include <ace/utils/palette.h>
 #include <ace/utils/custom.h>
 #include <ace/macros.h>
@@ -24,7 +25,11 @@ static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
 static tFont *s_pFont;
 
+tSprite *s_pSprite0;
+tBitMap *s_pSprite0Data;
+
 static UBYTE s_ubGameCount = 0;
+static UBYTE s_ubSelectedGame = 0;
 static char **s_ppGameNames;
 static char **s_ppGameCommandLines;
 static char **s_ppGameImages;
@@ -98,6 +103,30 @@ static UBYTE loadConfig(void) {
   return 1;
 }
 
+static void loadBitmap(void) {
+  char *filename = s_ppGameImages[s_ubSelectedGame];
+  if (filename && fileExists(filename)) {
+    blitUnsafeRect(s_pScreenshotBufferManager->pBack,
+      0, 0,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      0);
+    bitmapLoadFromFile(s_pScreenshotBufferManager->pBack, filename, 0, 0);
+  } else {
+    blitUnsafeRect(s_pScreenshotBufferManager->pBack,
+      0, 0,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      1);
+    blitLine(s_pScreenshotBufferManager->pBack,
+      0, 0,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      2, 0xffff, 0);
+    blitLine(s_pScreenshotBufferManager->pBack,
+      0, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, 0,
+      2, 0xffff, 0);
+  }
+}
+
 void genericCreate(void) {
   logWrite("Hello, Amiga!\n");
   if (!loadConfig()) {
@@ -132,6 +161,7 @@ void genericCreate(void) {
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[2], 0x0800);
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[3], 0x0080);
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[4], 0x0008);
+  loadBitmap();
 
   s_pListVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
@@ -157,9 +187,19 @@ void genericCreate(void) {
     fontDrawStr1bpp(s_pFont, s_pListBufferManager->pBack, 0, i * lineHeight, s_ppGameNames[i]);
   }
 
-  copProcessBlocks();
-  systemUnuse();
+  spriteManagerCreate(s_pView, 0);
+  // Remember about limited width to 16px AND extra line for header and footer
+  s_pSprite0Data = bitmapCreate(16, 2 + FONTHEIGHT, 2, BMF_CLEAR | BMF_INTERLEAVED);
+  blitLine(s_pSprite0Data, 0, FONTHEIGHT - 3, 15, FONTHEIGHT - 3, 1, 0xffff, 0);
+  s_pSprite0 = spriteAdd(0, s_pSprite0Data);
+  s_pSprite0->wX = s_pListVPort->uwOffsX - 1;
+  s_pSprite0->wY = s_pListVPort->uwOffsY;
+  spriteRequestMetadataUpdate(s_pSprite0);
+  spriteSetEnabled(s_pSprite0, 1);
+  systemSetDmaBit(DMAB_SPRITE, 1);
+
   viewLoad(s_pView);
+  systemUnuse();
 }
 
 void genericProcess(void) {
@@ -171,13 +211,53 @@ void genericProcess(void) {
   if (keyCheck(KEY_NUMENTER) || keyCheck(KEY_RETURN) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
     gameExit();
   }
+  if (keyCheck(KEY_UP) || joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
+    if (s_ubSelectedGame > 0) {
+      s_ubSelectedGame--;
+      if (s_pSprite0->wY > s_pListVPort->uwOffsY) {
+        s_pSprite0->wY -= FONTHEIGHT;
+        spriteRequestMetadataUpdate(s_pSprite0);
+      } else {
+        cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
+      }
+      loadBitmap();
+    }
+  }
+  if (keyCheck(KEY_DOWN) || joyCheck(JOY1_DOWN)|| joyCheck(JOY2_DOWN)) {
+    if (s_ubSelectedGame < s_ubGameCount - 1) {
+      s_ubSelectedGame++;
+      if (s_pSprite0->wY < s_pListVPort->uwOffsY + s_pListVPort->uwHeight + FONTHEIGHT) {
+        s_pSprite0->wY += FONTHEIGHT;
+        spriteRequestMetadataUpdate(s_pSprite0);
+      } else {
+        cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
+      }
+      loadBitmap();
+    }
+  }
+  spriteProcess(s_pSprite0);
+  spriteProcessChannel(0);
   viewProcessManagers(s_pView);
-  copSwapBuffers();
+  copProcessBlocks();
   vPortWaitUntilEnd(s_pListVPort);
 }
 
 void genericDestroy(void) {
   systemUse();
+  systemSetDmaBit(DMAB_SPRITE, 0);
+  bitmapDestroy(s_pSprite0Data);
+  spriteRemove(s_pSprite0);
+  spriteManagerDestroy();
+  copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
+  copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
+  for (UBYTE i = 0; i < s_ubGameCount; i++) {
+    memFree(s_ppGameNames[i], strlen(s_ppGameNames[i]) + 1);
+    memFree(s_ppGameCommandLines[i], strlen(s_ppGameCommandLines[i]) + 1);
+    memFree(s_ppGameImages[i], strlen(s_ppGameImages[i]) + 1);
+  }
+  memFree(s_ppGameNames, sizeof(char *) * s_ubGameCount);
+  memFree(s_ppGameCommandLines, sizeof(char *) * s_ubGameCount);
+  memFree(s_ppGameImages, sizeof(char *) * s_ubGameCount);
   viewDestroy(s_pView);
   fontDestroy(s_pFont);
   keyDestroy(); // We don't need it anymore
