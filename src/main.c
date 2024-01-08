@@ -5,9 +5,9 @@
 #include <ace/managers/state.h>
 #include <ace/managers/log.h>
 #include <ace/managers/viewport/simplebuffer.h>
-#include <ace/managers/sprite.h>
 #include <ace/utils/palette.h>
 #include <ace/utils/custom.h>
+#include <ace/managers/blit.h>
 #include <ace/macros.h>
 
 #include "stfont.h"
@@ -25,9 +25,6 @@ static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
 static tFont *s_pFont;
-
-tSprite *s_pSprite0;
-tBitMap *s_pSprite0Data;
 
 static UBYTE s_ubGameCount = 0;
 static UBYTE s_ubSelectedGame = 0;
@@ -128,6 +125,16 @@ static void loadBitmap(void) {
   }
 }
 
+static void invertSelectedGameString(void) {
+  UWORD uwBlitWords = s_pListBufferManager->uBfrBounds.uwX >> 4;
+	ULONG ulOffs = s_pListBufferManager->pBack->BytesPerRow * s_ubSelectedGame * FONTHEIGHT;
+  blitWait();
+  g_pCustom->bltcon0 = USEA|USED|0x0f; // invert A;
+  g_pCustom->bltcon1 = g_pCustom->bltamod = g_pCustom->bltdmod = 0;
+  g_pCustom->bltapt = g_pCustom->bltdpt = &s_pListBufferManager->pBack->Planes[0][ulOffs];
+  g_pCustom->bltsize = (FONTHEIGHT << HSIZEBITS) | uwBlitWords;
+}
+
 void genericCreate(void) {
   logWrite("Hello, Amiga!\n");
   if (!loadConfig()) {
@@ -145,7 +152,7 @@ void genericCreate(void) {
   s_pScreenshotVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
     TAG_VPORT_BPP, 5,
-    TAG_VPORT_HEIGHT, 100,
+    TAG_VPORT_HEIGHT, 140,
     TAG_END
   );
   s_pScreenshotBufferManager = simpleBufferCreate(0,
@@ -187,17 +194,7 @@ void genericCreate(void) {
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
     fontDrawStr1bpp(s_pFont, s_pListBufferManager->pBack, 0, i * lineHeight, s_ppGameNames[i]);
   }
-
-  spriteManagerCreate(s_pView, 0);
-  // Remember about limited width to 16px AND extra line for header and footer
-  s_pSprite0Data = bitmapCreate(16, 2 + FONTHEIGHT, 2, BMF_CLEAR | BMF_INTERLEAVED);
-  blitLine(s_pSprite0Data, 0, FONTHEIGHT - 3, 15, FONTHEIGHT - 3, 1, 0xffff, 0);
-  s_pSprite0 = spriteAdd(0, s_pSprite0Data);
-  s_pSprite0->wX = s_pListVPort->uwOffsX - 1;
-  s_pSprite0->wY = s_pListVPort->uwOffsY;
-  spriteRequestMetadataUpdate(s_pSprite0);
-  spriteSetEnabled(s_pSprite0, 1);
-  systemSetDmaBit(DMAB_SPRITE, 1);
+  invertSelectedGameString();
 
   viewLoad(s_pView);
   systemUnuse();
@@ -214,11 +211,10 @@ void genericProcess(void) {
   }
   if (keyCheck(KEY_UP) || joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
     if (s_ubSelectedGame > 0) {
+      invertSelectedGameString();
       s_ubSelectedGame--;
-      if (s_pSprite0->wY > s_pListVPort->uwOffsY) {
-        s_pSprite0->wY -= FONTHEIGHT;
-        spriteRequestMetadataUpdate(s_pSprite0);
-      } else {
+      invertSelectedGameString();
+      if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
         cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
       }
       loadBitmap();
@@ -226,18 +222,15 @@ void genericProcess(void) {
   }
   if (keyCheck(KEY_DOWN) || joyCheck(JOY1_DOWN)|| joyCheck(JOY2_DOWN)) {
     if (s_ubSelectedGame < s_ubGameCount - 1) {
+      invertSelectedGameString();
       s_ubSelectedGame++;
-      if (s_pSprite0->wY < s_pListVPort->uwOffsY + s_pListVPort->uwHeight + FONTHEIGHT) {
-        s_pSprite0->wY += FONTHEIGHT;
-        spriteRequestMetadataUpdate(s_pSprite0);
-      } else {
+      invertSelectedGameString();
+      if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
         cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
       }
       loadBitmap();
     }
   }
-  spriteProcess(s_pSprite0);
-  spriteProcessChannel(0);
   viewProcessManagers(s_pView);
   copProcessBlocks();
   vPortWaitUntilEnd(s_pListVPort);
@@ -245,10 +238,6 @@ void genericProcess(void) {
 
 void genericDestroy(void) {
   systemUse();
-  systemSetDmaBit(DMAB_SPRITE, 0);
-  bitmapDestroy(s_pSprite0Data);
-  spriteRemove(s_pSprite0);
-  spriteManagerDestroy();
   copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
   copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {

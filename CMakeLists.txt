@@ -67,5 +67,11 @@ bin2h(
 file(
   WRITE ${PROJECT_BINARY_DIR}/acelauncher.config
   "Die Siedler\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler 2\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler 3\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler 4\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler 5\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler Gold\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "The Settlers\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
   "Workbench\nloadwb\ndefault\n"
 )
