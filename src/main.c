@@ -16,6 +16,7 @@
 #define FONTMAXCHAR 122
 #define FONTMINCHAR 31
 #define CONFIGFILE "acelauncher.config"
+#define SCRIPTNAME "acelauncher.script"
 
 static tView *s_pView;
 static tVPort *s_pScreenshotVPort;
@@ -129,52 +130,55 @@ static UBYTE loadIlbm(const char *filename) {
   if (!f) {
     goto error;
   }
-  char chunk[4];
+  fileSeek(f, 0, SEEK_END);
+	LONG lSize = fileGetPos(f);
+  fileSeek(f, 0, SEEK_SET);
+	char *fileData = memAllocFast(lSize);
+  if (!fileData) {
+    goto error;
+  }
+  char *chunk = fileData;
+  for (LONG rem = lSize; rem > 0;) {
+    ULONG bytesRead = fileRead(f, chunk + (lSize - rem), rem);
+    rem -= bytesRead;
+    if (!bytesRead) {
+      break;
+    }
+  }
+  UBYTE retval = 0;
   ULONG size = 0;
   BitMapHeader bmhd;
   ColorRegister cr;
   Color4 c4;
-  if (fileRead(f, chunk, 4) != 4) {
-    goto error;
-  }
   if (memcmp("FORM", chunk, 4)) {
     goto error;
   }
-  if (fileRead(f, &size, 4) != 4) {
-    goto error;
-  }
-  if (fileRead(f, chunk, 4) != 4) {
-    goto error;
-  }
+  chunk += 4;
+  chunk += 4; // skip size
   if (memcmp("ILBM", chunk, 4)) {
     goto error;
   }
-  if (fileRead(f, chunk, 4) != 4) {
-    goto error;
-  }
+  chunk += 4;
   if (memcmp("BMHD", chunk, 4)) {
     goto error;
   }
-  if (fileRead(f, &size, 4) != 4) {
-    goto error;
-  }
+  chunk += 4;
+  memcpy(&size, chunk, 4);
+  chunk += 4;
   if (size != sizeof(BitMapHeader)) {
     goto error;
   }
-  if (fileRead(f, &bmhd, size) != size) {
-    goto error;
-  }
-  if (fileRead(f, chunk, 4) != 4) {
-    goto error;
-  }
+  memcpy(&bmhd, chunk, size);
+  chunk += size;
   if (memcmp("CMAP", chunk, 4)) {
     goto error;
   }
-  if (fileRead(f, &size, 4) != 4) {
-    goto error;
-  }
+  chunk += 4;
+  memcpy(&size, chunk, 4);
+  chunk += 4;
   for (UBYTE i = 0; i < size / 3; i++) {
-    fileRead(f, &cr, sizeof(ColorRegister));
+    memcpy(&cr, chunk, sizeof(ColorRegister));
+    chunk += sizeof(ColorRegister);
     c4.red = cr.red >> 4;
     c4.green = cr.green >> 4;
     c4.blue = cr.blue >> 4;
@@ -186,17 +190,14 @@ static UBYTE loadIlbm(const char *filename) {
   s_pScreenshotCopBlock->ubUpdated = 2;
   s_pView->pCopList->ubStatus |= STATUS_UPDATE;
   if (size % 2 != 0) {
-    fileRead(f, &size, 1); // skip pad byte for 16-bit alignment
-  }
-  if (fileRead(f, chunk, 4) != 4) {
-    goto error;
+    chunk += 1; // skip pad byte for 16-bit alignment
   }
   if (memcmp("BODY", chunk, 4)) {
     goto error;
   }
-  if (fileRead(f, &size, 4) != 4) {
-    goto error;
-  }
+  chunk += 4;
+  memcpy(&size, chunk, 4);
+  chunk += 4;
   if (size != bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
     goto error;
   }
@@ -214,20 +215,22 @@ static UBYTE loadIlbm(const char *filename) {
   UWORD offs = 0;
   for (UBYTE row = 0; row < height; row++) {
     for (UBYTE plane = 0; plane < bmhd.nPlanes; plane++) {
-      fileRead(f, s_pScreenshotBufferManager->pBack->Planes[plane] + offs, width);
-      fileSeek(f, (bmhd.w / 8) - width + padding, SEEK_CUR);
+      memcpy(s_pScreenshotBufferManager->pBack->Planes[plane] + offs, chunk, width);
+      chunk += width + ((bmhd.w / 8) - width + padding);
     }
     offs += s_pScreenshotBufferManager->pBack->BytesPerRow;
   }
-  systemUnuse();
-  return 1;
+  retval = 1;
 
   error:
     systemUnuse();
     if (f) {
       fileClose(f);
     }
-    return 0;
+    if (chunk) {
+      memFree(fileData, lSize);
+    }
+    return retval;
 }
 
 static void loadBitmap(void) {
@@ -335,6 +338,15 @@ void genericProcess(void) {
     gameExit();
   }
   if (keyCheck(KEY_NUMENTER) || keyCheck(KEY_RETURN) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
+    systemUse();
+    tFile *f = fileOpen(SCRIPTNAME, "r");
+    if (f) {
+      fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
+      fileClose(f);
+    } else {
+      logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
+    }
+    systemUnuse();
     gameExit();
   }
   if (keyCheck(KEY_UP) || joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
