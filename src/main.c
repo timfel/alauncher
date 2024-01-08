@@ -21,6 +21,7 @@ static tView *s_pView;
 static tVPort *s_pScreenshotVPort;
 static tSimpleBufferManager *s_pScreenshotBufferManager;
 static tCopBlock *s_pScreenshotCopBlock;
+static UBYTE s_screenshotCopBlockColor0;
 static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
@@ -101,14 +102,138 @@ static UBYTE loadConfig(void) {
   return 1;
 }
 
+// ILBM parsing structures taken directly from spec
+typedef struct __attribute__((__packed__)) {
+  UWORD       w, h;             /* raster width & height in pixels      */
+  WORD        x, y;             /* pixel position for this image        */
+  UBYTE       nPlanes;          /* # source bitplanes                   */
+  UBYTE     masking;
+  UBYTE compression;
+  UBYTE       Flags;            /* CMAP flags (formerly pad1, unused)   */
+  UWORD       transparentColor; /* transparent "color number" (sort of) */
+  UBYTE       xAspect, yAspect; /* pixel aspect, a ratio width : height */
+  WORD        pageWidth, pageHeight; /* source "page" size in pixels    */
+} BitMapHeader;
+
+typedef struct __attribute__((__packed__)) {
+  UBYTE red, green, blue;           /* color intensities 0..255 */
+} ColorRegister;                  /* size = 3 bytes           */
+
+typedef struct  __attribute__((__packed__)) {
+  unsigned pad1 :4, red :4, green :4, blue :4;
+} Color4;
+
+static UBYTE loadIlbm(const char *filename) {
+  systemUse();
+  tFile *f = fileOpen(filename, "r");
+  if (!f) {
+    goto error;
+  }
+  char chunk[4];
+  ULONG size = 0;
+  BitMapHeader bmhd;
+  ColorRegister cr;
+  Color4 c4;
+  if (fileRead(f, chunk, 4) != 4) {
+    goto error;
+  }
+  if (memcmp("FORM", chunk, 4)) {
+    goto error;
+  }
+  if (fileRead(f, &size, 4) != 4) {
+    goto error;
+  }
+  if (fileRead(f, chunk, 4) != 4) {
+    goto error;
+  }
+  if (memcmp("ILBM", chunk, 4)) {
+    goto error;
+  }
+  if (fileRead(f, chunk, 4) != 4) {
+    goto error;
+  }
+  if (memcmp("BMHD", chunk, 4)) {
+    goto error;
+  }
+  if (fileRead(f, &size, 4) != 4) {
+    goto error;
+  }
+  if (size != sizeof(BitMapHeader)) {
+    goto error;
+  }
+  if (fileRead(f, &bmhd, size) != size) {
+    goto error;
+  }
+  if (fileRead(f, chunk, 4) != 4) {
+    goto error;
+  }
+  if (memcmp("CMAP", chunk, 4)) {
+    goto error;
+  }
+  if (fileRead(f, &size, 4) != 4) {
+    goto error;
+  }
+  for (UBYTE i = 0; i < size / 3; i++) {
+    fileRead(f, &cr, sizeof(ColorRegister));
+    c4.red = cr.red >> 4;
+    c4.green = cr.green >> 4;
+    c4.blue = cr.blue >> 4;
+    copSetMoveVal(
+      &s_pScreenshotCopBlock->pCmds[s_screenshotCopBlockColor0 + i].sMove,
+      ((UWORD)c4.red << 8) | ((UWORD)c4.green << 4) | c4.blue
+    );
+  }
+  s_pScreenshotCopBlock->ubUpdated = 2;
+  s_pView->pCopList->ubStatus |= STATUS_UPDATE;
+  if (size % 2 != 0) {
+    fileRead(f, &size, 1); // skip pad byte for 16-bit alignment
+  }
+  if (fileRead(f, chunk, 4) != 4) {
+    goto error;
+  }
+  if (memcmp("BODY", chunk, 4)) {
+    goto error;
+  }
+  if (fileRead(f, &size, 4) != 4) {
+    goto error;
+  }
+  if (size != bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
+    goto error;
+  }
+  if (bmhd.compression != 0) {
+    goto error;
+  }
+  // TODO: clear buffer
+  UWORD height = MIN(bmhd.h, s_pScreenshotBufferManager->uBfrBounds.uwY);
+  UWORD width = MIN(bmhd.w, s_pScreenshotBufferManager->uBfrBounds.uwX);
+  UBYTE padding = 0;
+  if (width % 8) {
+    padding = 1;
+  }
+  width /= 8;
+  UWORD offs = 0;
+  for (UBYTE row = 0; row < height; row++) {
+    for (UBYTE plane = 0; plane < bmhd.nPlanes; plane++) {
+      fileRead(f, s_pScreenshotBufferManager->pBack->Planes[plane] + offs, width);
+      fileSeek(f, (bmhd.w / 8) - width + padding, SEEK_CUR);
+    }
+    offs += s_pScreenshotBufferManager->pBack->BytesPerRow;
+  }
+  systemUnuse();
+  return 1;
+
+  error:
+    systemUnuse();
+    if (f) {
+      fileClose(f);
+    }
+    return 0;
+}
+
 static void loadBitmap(void) {
   char *filename = s_ppGameImages[s_ubSelectedGame];
-  if (filename && fileExists(filename)) {
-    blitUnsafeRect(s_pScreenshotBufferManager->pBack,
-      0, 0,
-      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
-      0);
-    bitmapLoadFromFile(s_pScreenshotBufferManager->pBack, filename, 0, 0);
+  if (loadIlbm(filename)) {
+    // image loaded, all fine
   } else {
     blitUnsafeRect(s_pScreenshotBufferManager->pBack,
       0, 0,
@@ -162,13 +287,16 @@ void genericCreate(void) {
     TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
     TAG_END
   );
-  s_pScreenshotCopBlock = copBlockCreate(s_pView->pCopList, 5, 0, 0);
+  s_pScreenshotCopBlock = copBlockCreate(s_pView->pCopList, 33, 0, 0);
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->bplcon0, (s_pScreenshotVPort->ubBPP << 12) | BV(9));
+  s_screenshotCopBlockColor0 = s_pScreenshotCopBlock->uwCurrCount;
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[0], 0x0000);
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[1], 0x0888);
   copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[2], 0x0800);
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[3], 0x0080);
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[4], 0x0008);
+  for (UBYTE i = 3; i < 32; ++i) {
+    copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[i], 0x0000);
+  }
+
   loadBitmap();
 
   s_pListVPort = vPortCreate(0,
@@ -187,7 +315,7 @@ void genericCreate(void) {
     TAG_END
   );
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
-  s_pListCopBlock = copBlockCreate(s_pView->pCopList, 5, 0, s_pView->ubPosY + s_pListVPort->uwOffsY);
+  s_pListCopBlock = copBlockCreate(s_pView->pCopList, 3, 0, s_pView->ubPosY + s_pListVPort->uwOffsY);
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->bplcon0, (s_pListVPort->ubBPP << 12) | BV(9));
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[0], 0x0000);
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[1], 0x0800);
