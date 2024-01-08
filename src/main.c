@@ -10,7 +10,8 @@
 #include <ace/utils/custom.h>
 #include <ace/macros.h>
 
-#define FONTFILE "font.fnt"
+#include "stfont.h"
+
 #define FONTHEIGHT 14
 #define FONTMAXCHAR 122
 #define FONTMINCHAR 31
@@ -168,7 +169,7 @@ void genericCreate(void) {
     TAG_VPORT_BPP, 1,
     TAG_END
   );
-  s_pFont = fontCreate(FONTFILE);
+  s_pFont = fontCreateFromMem(S_PFONTDATA);
   UWORD lineHeight = FONTHEIGHT;
   s_pListBufferManager = simpleBufferCreate(0,
     TAG_SIMPLEBUFFER_VPORT, s_pListVPort,

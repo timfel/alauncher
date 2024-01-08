@@ -14,6 +14,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DACE_DEBUG -DACE_DEBUG_UAE")
 
 add_subdirectory(deps/ACE ace)
 include_directories(deps/ace/include)
+include_directories(${PROJECT_BINARY_DIR}/include)
 
 file(GLOB_RECURSE SOURCES src/*.c)
 file(GLOB_RECURSE HEADERS src/*.h)
@@ -54,6 +55,13 @@ convertFont(
        FIRST_CHAR 31
        SOURCE ${PROJECT_SOURCE_DIR}/resources/font.png
        DESTINATION ${PROJECT_BINARY_DIR}/font.fnt
+)
+make_directory(${PROJECT_BINARY_DIR}/include)
+include(bin2h.cmake)
+bin2h(
+  SOURCE_FILE ${PROJECT_BINARY_DIR}/font.fnt
+  HEADER_FILE ${PROJECT_BINARY_DIR}/include/stfont.h
+  VARIABLE_NAME S_PFONTDATA
 )
 
 file(
