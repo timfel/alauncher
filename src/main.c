@@ -274,6 +274,12 @@ static void invertSelectedGameString(void) {
   g_pCustom->bltsize = (FONTHEIGHT << HSIZEBITS) | uwBlitWords;
 }
 
+static void debugColor(USHORT color) {
+  s_pListCopBlock->pCmds[2].sMove.bfValue = color;
+  s_pListCopBlock->ubUpdated = 2;
+  s_pView->pCopList->ubStatus |= STATUS_UPDATE;
+}
+
 void genericCreate(void) {
   if (!loadConfig()) {
     return;
@@ -348,8 +354,7 @@ void genericProcess(void) {
   joyProcess();
   if (keyCheck(KEY_ESCAPE)) {
     gameExit();
-  }
-  if (keyCheck(KEY_NUMENTER) || keyCheck(KEY_RETURN) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
+  } else if (joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
     systemUse();
     tFile *f = fileOpen(SCRIPTNAME, "r");
     if (f) {
@@ -360,8 +365,7 @@ void genericProcess(void) {
     }
     systemUnuse();
     gameExit();
-  }
-  if (keyCheck(KEY_UP) || joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
+  } else if (joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
     if (s_ubSelectedGame > 0) {
       invertSelectedGameString();
       s_ubSelectedGame--;
@@ -371,8 +375,7 @@ void genericProcess(void) {
       }
       loadBitmap();
     }
-  }
-  if (keyCheck(KEY_DOWN) || joyCheck(JOY1_DOWN)|| joyCheck(JOY2_DOWN)) {
+  } else if (joyCheck(JOY1_DOWN)|| joyCheck(JOY2_DOWN)) {
     if (s_ubSelectedGame < s_ubGameCount - 1) {
       invertSelectedGameString();
       s_ubSelectedGame++;
