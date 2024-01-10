@@ -44,7 +44,7 @@ static char *memReallocFast(char *ptr, UWORD oldSize, UWORD size) {
 static UBYTE loadConfig(void) {
   tFile *config = fileOpen(CONFIGFILE, "r");
   if (!config) {
-    printf_("Failed to open config file " CONFIGFILE "\n");
+    logWrite("Failed to open config file " CONFIGFILE "\n");
     gameExit();
     return 0;
   }
@@ -130,15 +130,15 @@ static UBYTE loadIlbm(const char *filename) {
   tFile *f = fileOpen(filename, "r");
   char *chunk = NULL;
   if (!f) {
-    printf_("Cannot open file: %s\n", filename);
+    logWrite("Cannot open file: %s\n", filename);
     goto error;
   }
-    fileSeek(f, 0, SEEK_END);
+  fileSeek(f, 0, SEEK_END);
 	LONG lSize = fileGetPos(f);
   fileSeek(f, 0, SEEK_SET);
 	char *fileData = memAllocFast(lSize);
   if (!fileData) {
-    printf_("Cannot allocate %ld bytes of memory for file %s\n", lSize, filename);
+    logWrite("Cannot allocate %ld bytes of memory for file %s\n", lSize, filename);
     goto error;
   }
   chunk = fileData;
@@ -154,31 +154,31 @@ static UBYTE loadIlbm(const char *filename) {
   ColorRegister cr;
   Color4 c4;
   if (memcmp("FORM", chunk, 4)) {
-    printf_("Expected a FORM IFF file\n");
+    logWrite("Expected a FORM IFF file\n");
     goto error;
   }
   chunk += 4;
   chunk += 4; // skip size
   if (memcmp("ILBM", chunk, 4)) {
-    printf_("Expected an ILBM FORM file\n");
+    logWrite("Expected an ILBM FORM file\n");
     goto error;
   }
   chunk += 4;
   if (memcmp("BMHD", chunk, 4)) {
-    printf_("Expected a BMHD bitmap header\n");
+    logWrite("Expected a BMHD bitmap header\n");
     goto error;
   }
   chunk += 4;
   memcpy(&size, chunk, 4);
   chunk += 4;
   if (size != sizeof(BitMapHeader)) {
-    printf_("Expected a bitmap header of size %ld\n", sizeof(BitMapHeader));
+    logWrite("Expected a bitmap header of size %ld\n", sizeof(BitMapHeader));
     goto error;
   }
   memcpy(&bmhd, chunk, size);
   chunk += size;
   if (memcmp("CMAP", chunk, 4)) {
-    printf_("Expected a CMAP colormap\n");
+    logWrite("Expected a CMAP colormap\n");
     goto error;
   }
   chunk += 4;
@@ -201,18 +201,18 @@ static UBYTE loadIlbm(const char *filename) {
     chunk += 1; // skip pad byte for 16-bit alignment
   }
   if (memcmp("BODY", chunk, 4)) {
-    printf_("Expected a raster image BODY\n");
+    logWrite("Expected a raster image BODY\n");
     goto error;
   }
   chunk += 4;
   memcpy(&size, chunk, 4);
   chunk += 4;
   if (size != bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
-    printf_("Expected %d bytes of raster data, not %ld\n", bmhd.nPlanes * bmhd.w * bmhd.h / 8, size);
+    logWrite("Expected %d bytes of raster data, not %ld\n", bmhd.nPlanes * bmhd.w * bmhd.h / 8, size);
     goto error;
   }
   if (bmhd.compression != 0) {
-    printf_("Compressed IFF files are not supported\n");
+    logWrite("Compressed IFF files are not supported\n");
     goto error;
   }
   // TODO: clear buffer
@@ -234,7 +234,6 @@ static UBYTE loadIlbm(const char *filename) {
   retval = 1;
 
   error:
-  
     if (f) {
       fileClose(f);
     }
