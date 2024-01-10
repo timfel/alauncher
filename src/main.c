@@ -3,7 +3,6 @@
 #include <ace/managers/joy.h>
 #include <ace/managers/key.h>
 #include <ace/managers/state.h>
-#include <ace/managers/log.h>
 #include <ace/managers/viewport/simplebuffer.h>
 #include <ace/utils/palette.h>
 #include <ace/utils/custom.h>
@@ -23,6 +22,7 @@ static tVPort *s_pScreenshotVPort;
 static tSimpleBufferManager *s_pScreenshotBufferManager;
 static tCopBlock *s_pScreenshotCopBlock;
 static UBYTE s_screenshotCopBlockColor0;
+static tCopBlock *s_pOffCopBlock;
 static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
@@ -44,7 +44,7 @@ static char *memReallocFast(char *ptr, UWORD oldSize, UWORD size) {
 static UBYTE loadConfig(void) {
   tFile *config = fileOpen(CONFIGFILE, "r");
   if (!config) {
-    logWrite("Failed to open config file\n");
+    printf_("Failed to open config file " CONFIGFILE "\n");
     gameExit();
     return 0;
   }
@@ -126,18 +126,22 @@ typedef struct  __attribute__((__packed__)) {
 
 static UBYTE loadIlbm(const char *filename) {
   systemUse();
+  UBYTE retval = 0;
   tFile *f = fileOpen(filename, "r");
+  char *chunk = NULL;
   if (!f) {
+    printf_("Cannot open file: %s\n", filename);
     goto error;
   }
-  fileSeek(f, 0, SEEK_END);
+    fileSeek(f, 0, SEEK_END);
 	LONG lSize = fileGetPos(f);
   fileSeek(f, 0, SEEK_SET);
 	char *fileData = memAllocFast(lSize);
   if (!fileData) {
+    printf_("Cannot allocate %ld bytes of memory for file %s\n", lSize, filename);
     goto error;
   }
-  char *chunk = fileData;
+  chunk = fileData;
   for (LONG rem = lSize; rem > 0;) {
     ULONG bytesRead = fileRead(f, chunk + (lSize - rem), rem);
     rem -= bytesRead;
@@ -145,32 +149,36 @@ static UBYTE loadIlbm(const char *filename) {
       break;
     }
   }
-  UBYTE retval = 0;
   ULONG size = 0;
   BitMapHeader bmhd;
   ColorRegister cr;
   Color4 c4;
   if (memcmp("FORM", chunk, 4)) {
+    printf_("Expected a FORM IFF file\n");
     goto error;
   }
   chunk += 4;
   chunk += 4; // skip size
   if (memcmp("ILBM", chunk, 4)) {
+    printf_("Expected an ILBM FORM file\n");
     goto error;
   }
   chunk += 4;
   if (memcmp("BMHD", chunk, 4)) {
+    printf_("Expected a BMHD bitmap header\n");
     goto error;
   }
   chunk += 4;
   memcpy(&size, chunk, 4);
   chunk += 4;
   if (size != sizeof(BitMapHeader)) {
+    printf_("Expected a bitmap header of size %ld\n", sizeof(BitMapHeader));
     goto error;
   }
   memcpy(&bmhd, chunk, size);
   chunk += size;
   if (memcmp("CMAP", chunk, 4)) {
+    printf_("Expected a CMAP colormap\n");
     goto error;
   }
   chunk += 4;
@@ -193,15 +201,18 @@ static UBYTE loadIlbm(const char *filename) {
     chunk += 1; // skip pad byte for 16-bit alignment
   }
   if (memcmp("BODY", chunk, 4)) {
+    printf_("Expected a raster image BODY\n");
     goto error;
   }
   chunk += 4;
   memcpy(&size, chunk, 4);
   chunk += 4;
   if (size != bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
+    printf_("Expected %d bytes of raster data, not %ld\n", bmhd.nPlanes * bmhd.w * bmhd.h / 8, size);
     goto error;
   }
   if (bmhd.compression != 0) {
+    printf_("Compressed IFF files are not supported\n");
     goto error;
   }
   // TODO: clear buffer
@@ -223,10 +234,11 @@ static UBYTE loadIlbm(const char *filename) {
   retval = 1;
 
   error:
-    systemUnuse();
+  
     if (f) {
       fileClose(f);
     }
+    systemUnuse();
     if (chunk) {
       memFree(fileData, lSize);
     }
@@ -240,16 +252,16 @@ static void loadBitmap(void) {
   } else {
     blitUnsafeRect(s_pScreenshotBufferManager->pBack,
       0, 0,
-      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY,
       1);
     blitLine(s_pScreenshotBufferManager->pBack,
       0, 0,
-      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
-      2, 0xffff, 0);
+      s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY,
+      0, 0xffff, 0);
     blitLine(s_pScreenshotBufferManager->pBack,
-      0, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
-      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, 0,
-      2, 0xffff, 0);
+      0, s_pScreenshotBufferManager->uBfrBounds.uwY,
+      s_pScreenshotBufferManager->uBfrBounds.uwX, 0,
+      0, 0xffff, 0);
   }
 }
 
@@ -264,11 +276,9 @@ static void invertSelectedGameString(void) {
 }
 
 void genericCreate(void) {
-  logWrite("Hello, Amiga!\n");
   if (!loadConfig()) {
     return;
   }
-
   keyCreate(); // We'll use keyboard
   joyOpen(); // We'll use joystick
 
@@ -299,7 +309,6 @@ void genericCreate(void) {
   for (UBYTE i = 3; i < 32; ++i) {
     copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[i], 0x0000);
   }
-
   loadBitmap();
 
   s_pListVPort = vPortCreate(0,
@@ -318,12 +327,16 @@ void genericCreate(void) {
     TAG_END
   );
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
-  s_pListCopBlock = copBlockCreate(s_pView->pCopList, 3, 0, s_pView->ubPosY + s_pListVPort->uwOffsY);
+  s_pOffCopBlock = copBlockCreate(s_pView->pCopList, 1, 0, s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight);
+  copMove(s_pView->pCopList, s_pOffCopBlock, &g_pCustom->dmacon, BV(8)); // disable bitplanes
+
+  s_pListCopBlock = copBlockCreate(s_pView->pCopList, 4, 0, s_pView->ubPosY + s_pListVPort->uwOffsY);
+  copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->dmacon, BV(15) | BV(8)); // enable bitplanes
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->bplcon0, (s_pListVPort->ubBPP << 12) | BV(9));
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[0], 0x0000);
   copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[1], 0x0800);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
-    fontDrawStr1bpp(s_pFont, s_pListBufferManager->pBack, 0, i * lineHeight, s_ppGameNames[i]);
+    fontDrawStr1bpp(s_pFont, s_pListBufferManager->pBack, 0, i * lineHeight + 1, s_ppGameNames[i]);
   }
   invertSelectedGameString();
 
@@ -380,6 +393,7 @@ void genericDestroy(void) {
   systemUse();
   copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
   copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
+  copBlockDestroy(s_pView->pCopList, s_pOffCopBlock);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
     memFree(s_ppGameNames[i], strlen(s_ppGameNames[i]) + 1);
     memFree(s_ppGameCommandLines[i], strlen(s_ppGameCommandLines[i]) + 1);
@@ -392,5 +406,4 @@ void genericDestroy(void) {
   fontDestroy(s_pFont);
   keyDestroy(); // We don't need it anymore
   joyClose(); // We don't need it anymore
-  logWrite("Goodbye, Amiga!\n");
 }

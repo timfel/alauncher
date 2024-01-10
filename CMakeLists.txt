@@ -9,7 +9,7 @@ if(NOT AMIGA)
 endif()
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAMIGA -DACE_NO_BOB_WRAP_Y -Wall -Wextra -fomit-frame-pointer")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAMIGA -DACE_NO_BOB_WRAP_Y -Wall -Wextra -fomit-frame-pointer -DPRINTF_USE_SUFFIX")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DACE_DEBUG -DACE_DEBUG_UAE")
 
 add_subdirectory(deps/ACE ace)
@@ -37,9 +37,17 @@ if(ELF2HUNK)
     WRITE ${PROJECT_BINARY_DIR}/disassemble.cmake
     "EXECUTE_PROCESS(COMMAND ${OBJDUMP} --disassemble -S ${GAME_LINKED} OUTPUT_FILE ${TARGET_NAME}.s)"
   )
+  set(ADF_DIR "${CMAKE_CURRENT_BINARY_DIR}/adf")
   add_custom_command(
     TARGET ${GAME_LINKED} POST_BUILD
     COMMAND ${CMAKE_COMMAND} ARGS -P ${PROJECT_BINARY_DIR}/disassemble.cmake
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ADF_DIR}/s"
+    COMMAND ${CMAKE_COMMAND} -E copy "${GAME_EXE}" "${ADF_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "acelauncher.config" "${ADF_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "DieSiedler.iff" "${ADF_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E echo "${GAME_EXE}" > "${ADF_DIR}/s/startup-sequence"
+    COMMAND exe2adf -l ${CMAKE_PROJECT_NAME} -a "${CMAKE_PROJECT_NAME}.adf" -d "${ADF_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${ADF_DIR}"
   )
 else()
   # Just produce the executable with Bebbo compiler
@@ -66,12 +74,6 @@ bin2h(
 
 file(
   WRITE ${PROJECT_BINARY_DIR}/acelauncher.config
-  "Die Siedler\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
-  "Die Siedler 2\ndh0:DieSiedler/DieSiedler\nDieSiedler.iff\n"
-  "Die Siedler 3\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
-  "Die Siedler 4\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
-  "Die Siedler 5\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
-  "Die Siedler Gold\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
-  "The Settlers\ndh0:DieSiedler/DieSiedler\ndh0:DieSiedler.bm\n"
+  "Die Siedler\ndh0:DieSiedler/DieSiedler\nDieSiedler.iff\n"
   "Workbench\nloadwb\ndefault\n"
 )
