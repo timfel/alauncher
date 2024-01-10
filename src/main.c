@@ -215,7 +215,7 @@ static UBYTE loadIlbm(const char *filename) {
     logWrite("Compressed IFF files are not supported\n");
     goto error;
   }
-  // TODO: clear buffer
+  blitUnsafeRect(s_pScreenshotBufferManager->pBack, 0, 0, s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY, 0);
   UWORD height = MIN(bmhd.h, s_pScreenshotBufferManager->uBfrBounds.uwY);
   UWORD width = MIN(bmhd.w, s_pScreenshotBufferManager->uBfrBounds.uwX);
   UBYTE padding = 0;
