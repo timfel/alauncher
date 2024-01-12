@@ -43,7 +43,7 @@ if(ELF2HUNK)
     COMMAND ${CMAKE_COMMAND} ARGS -P ${PROJECT_BINARY_DIR}/disassemble.cmake
     COMMAND ${CMAKE_COMMAND} -E make_directory "${ADF_DIR}/s"
     COMMAND ${CMAKE_COMMAND} -E copy "${GAME_EXE}" "${ADF_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "acelauncher.config" "${ADF_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "cdtvlauncher.config" "${ADF_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy "DieSiedler.iff" "${ADF_DIR}"
     COMMAND ${CMAKE_COMMAND} -E echo "${GAME_EXE}" > "${ADF_DIR}/s/startup-sequence"
     COMMAND exe2adf -l ${CMAKE_PROJECT_NAME} -a "${CMAKE_PROJECT_NAME}.adf" -d "${ADF_DIR}"
@@ -73,7 +73,7 @@ bin2h(
 )
 
 file(
-  WRITE ${PROJECT_BINARY_DIR}/acelauncher.config
-  "Die Siedler\ndh0:DieSiedler/DieSiedler\nDieSiedler.iff\n"
+  WRITE ${PROJECT_BINARY_DIR}/cdtvlauncher.config
+  "Die Siedler\ndh0:DieSiedler/DieSiedler\nApidyaAudios.iff\n"
   "Workbench\nloadwb\ndefault\n"
 )

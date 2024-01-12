@@ -14,8 +14,8 @@
 #define FONTHEIGHT 14
 #define FONTMAXCHAR 122
 #define FONTMINCHAR 31
-#define CONFIGFILE "acelauncher.config"
-#define SCRIPTNAME "acelauncher.script"
+#define CONFIGFILE "cdtvlauncher.config"
+#define SCRIPTNAME "cdtvlauncher.script"
 
 static tView *s_pView;
 static tVPort *s_pScreenshotVPort;
@@ -27,6 +27,8 @@ static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
 static tFont *s_pFont;
+
+static ULONG s_ulTimer = 0;
 
 static UBYTE s_ubGameCount = 0;
 static UBYTE s_ubSelectedGame = 0;
@@ -94,6 +96,9 @@ static UBYTE loadConfig(void) {
         }
       }
     } else if (i < sizeof(line) - 1) {
+      if (c == ';') {
+        c = '\n';
+      }
       line[i++] = c;
     } else {
       continue;
@@ -207,8 +212,8 @@ static UBYTE loadIlbm(const char *filename) {
   chunk += 4;
   memcpy(&size, chunk, 4);
   chunk += 4;
-  if (size != bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
-    logWrite("Expected %d bytes of raster data, not %ld\n", bmhd.nPlanes * bmhd.w * bmhd.h / 8, size);
+  if (size < bmhd.nPlanes * bmhd.w * bmhd.h / 8) {
+    logWrite("Expected at least %d bytes of raster data, not %ld\n", bmhd.nPlanes * bmhd.w * bmhd.h / 8, size);
     goto error;
   }
   if (bmhd.compression != 0) {
@@ -218,16 +223,14 @@ static UBYTE loadIlbm(const char *filename) {
   blitUnsafeRect(s_pScreenshotBufferManager->pBack, 0, 0, s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY, 0);
   UWORD height = MIN(bmhd.h, s_pScreenshotBufferManager->uBfrBounds.uwY);
   UWORD width = MIN(bmhd.w, s_pScreenshotBufferManager->uBfrBounds.uwX);
-  UBYTE padding = 0;
-  if (width % 8) {
-    padding = 1;
-  }
-  width /= 8;
+  UWORD lineLength = (bmhd.w + 15) / 16;
+  width = (width + 7) / 8;
+  UWORD paddingBytes = lineLength * 2 - width;
   UWORD offs = 0;
   for (UBYTE row = 0; row < height; row++) {
     for (UBYTE plane = 0; plane < bmhd.nPlanes; plane++) {
       memcpy(s_pScreenshotBufferManager->pBack->Planes[plane] + offs, chunk, width);
-      chunk += width + ((bmhd.w / 8) - width + padding);
+      chunk += width + paddingBytes;
     }
     offs += s_pScreenshotBufferManager->pBack->BytesPerRow;
   }
@@ -345,6 +348,7 @@ void genericCreate(void) {
   }
   invertSelectedGameString();
 
+  timerCreate();
   viewLoad(s_pView);
   systemUnuse();
 }
@@ -352,38 +356,42 @@ void genericCreate(void) {
 void genericProcess(void) {
   keyProcess();
   joyProcess();
-  if (keyCheck(KEY_ESCAPE)) {
-    gameExit();
-  } else if (joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
-    systemUse();
-    tFile *f = fileOpen(SCRIPTNAME, "r");
-    if (f) {
-      fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
-      fileClose(f);
-    } else {
-      logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
-    }
-    systemUnuse();
-    gameExit();
-  } else if (joyCheck(JOY1_UP)|| joyCheck(JOY2_UP)) {
-    if (s_ubSelectedGame > 0) {
-      invertSelectedGameString();
-      s_ubSelectedGame--;
-      invertSelectedGameString();
-      if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
-        cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
+  timerProcess();
+  if (timerCheck(&s_ulTimer, 10)) {
+    // only check input every 10 frames
+    if (keyCheck(KEY_ESCAPE)) {
+      gameExit();
+    } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
+      systemUse();
+      tFile *f = fileOpen(SCRIPTNAME, "w");
+      if (f) {
+        fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
+        fileClose(f);
+      } else {
+        logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
-      loadBitmap();
-    }
-  } else if (joyCheck(JOY1_DOWN)|| joyCheck(JOY2_DOWN)) {
-    if (s_ubSelectedGame < s_ubGameCount - 1) {
-      invertSelectedGameString();
-      s_ubSelectedGame++;
-      invertSelectedGameString();
-      if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
-        cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
+      systemUnuse();
+      gameExit();
+    } else if (joyCheck(JOY1_UP)) {
+      if (s_ubSelectedGame > 0) {
+        invertSelectedGameString();
+        s_ubSelectedGame--;
+        invertSelectedGameString();
+        if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
+          cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
+        }
+        loadBitmap();
       }
-      loadBitmap();
+    } else if (joyCheck(JOY1_DOWN)) {
+      if (s_ubSelectedGame < s_ubGameCount - 1) {
+        invertSelectedGameString();
+        s_ubSelectedGame++;
+        invertSelectedGameString();
+        if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
+          cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
+        }
+        loadBitmap();
+      }
     }
   }
   viewProcessManagers(s_pView);
@@ -393,6 +401,7 @@ void genericProcess(void) {
 
 void genericDestroy(void) {
   systemUse();
+  timerDestroy();
   copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
   copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
   copBlockDestroy(s_pView->pCopList, s_pOffCopBlock);
