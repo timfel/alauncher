@@ -3,3 +3,6 @@ build/
 rom.key
 *.adf
 .vscode/settings.json
+tools/newadf
+tools/xxx
+xxx

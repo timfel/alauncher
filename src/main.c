@@ -287,10 +287,45 @@ static void debugColor(USHORT color) {
   s_pView->pCopList->ubStatus |= STATUS_UPDATE;
 }
 
+static void loadPosition(void) {
+  tFile *f = fileOpen(SCRIPTNAME, "r");
+  char position[4];
+  memset(position, 0, sizeof(position));
+  if (f) {
+    fileRead(f, position, 4);
+    fileClose(f);
+    if ((f = fileOpen(SCRIPTNAME, "w"))) {
+      // clear file
+      fileClose(f);
+    }
+  } else {
+    position[0] = ';';
+    position[1] = '0';
+    position[2] = '0';
+    position[3] = '0';
+  }
+  s_ubSelectedGame = 0;
+  if (position[0] == ';') {
+    for (UBYTE i = 1; i < 4; i++) {
+      if (position[i] < '0' || position[i] > '9') {
+        s_ubSelectedGame *= 10;
+        s_ubSelectedGame += (position[i] - '0');
+      } else {
+        break;
+      }
+    }
+    if (s_ubSelectedGame >= s_ubGameCount) {
+      s_ubSelectedGame = 0;
+    }
+  }
+}
+
 void genericCreate(void) {
   if (!loadConfig()) {
     return;
   }
+  loadPosition();
+
   keyCreate(); // We'll use keyboard
   joyOpen(); // We'll use joystick
 
