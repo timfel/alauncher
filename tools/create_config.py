@@ -19,7 +19,7 @@ if __name__ == "__main__":
     slave_files = []
     for root, dirs, files in os.walk(args.folder):
         for file in files:
-            if file.endswith(".slave"):
+            if file.lower().endswith(".slave"):
                 slave_files.append(os.path.join(root, file))
 
     pics = os.path.join(args.output, "cdtvlauncher.pics")
@@ -31,7 +31,7 @@ if __name__ == "__main__":
             relpath = os.path.relpath(slave, args.folder)
             f.write(f"{name}\n")
             f.write(args.command_template.format(relslave=relpath, reldir=os.path.dirname(relpath), basename=basename) + "\n")
-            f.write(f"{name}.iff\n")
+            f.write(f"sys:cdtvlauncher.pics/{name}.iff\n")
 
     for slave in slave_files:
         basename = os.path.basename(slave)

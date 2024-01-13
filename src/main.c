@@ -403,6 +403,11 @@ void genericProcess(void) {
     } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
       tFile *f = fileOpen(SCRIPTNAME, "w");
       if (f) {
+        fileWrite(f, ";", 1);
+        char buf[4];
+        sprintf(buf, "%d", s_ubSelectedGame);
+        fileWrite(f, buf, strlen(buf));
+        fileWrite(f, "\n", 1);
         fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
         fileClose(f);
       } else {
