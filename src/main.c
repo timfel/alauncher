@@ -134,7 +134,6 @@ typedef struct  __attribute__((__packed__)) {
 } Color4;
 
 static UBYTE loadIlbm(const char *filename) {
-  systemUse();
   UBYTE retval = 0;
   tFile *f = fileOpen(filename, "r");
   char *chunk = NULL;
@@ -244,7 +243,6 @@ static UBYTE loadIlbm(const char *filename) {
     if (f) {
       fileClose(f);
     }
-    systemUnuse();
     if (chunk) {
       memFree(fileData, lSize);
     }
@@ -388,7 +386,6 @@ void genericCreate(void) {
 
   timerCreate();
   viewLoad(s_pView);
-  systemUnuse();
 }
 
 void genericProcess(void) {
@@ -404,7 +401,6 @@ void genericProcess(void) {
     if (keyCheck(KEY_ESCAPE)) {
       gameExit();
     } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
-      systemUse();
       tFile *f = fileOpen(SCRIPTNAME, "w");
       if (f) {
         fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
@@ -412,7 +408,6 @@ void genericProcess(void) {
       } else {
         logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
-      systemUnuse();
       gameExit();
     } else if (joyCheck(JOY1_UP)) {
       if (s_ubSelectedGame > 0) {
@@ -442,7 +437,6 @@ void genericProcess(void) {
 }
 
 void genericDestroy(void) {
-  systemUse();
   timerDestroy();
   copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
   copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
