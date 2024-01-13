@@ -44,20 +44,25 @@ static char *memReallocFast(char *ptr, UWORD oldSize, UWORD size) {
 }
 
 static UBYTE loadConfig(void) {
+  LONG lSize = fileGetSize(CONFIGFILE);
   tFile *config = fileOpen(CONFIGFILE, "r");
-  if (!config) {
+  if (!config || lSize < 0) {
     logWrite("Failed to open config file " CONFIGFILE "\n");
     gameExit();
     return 0;
   }
+  char *contents = memAllocFastClear(lSize + 1);
+  do {
+     lSize -= fileRead(config, contents, lSize);
+  } while (lSize > 0);
+  fileClose(config);
+
   char line[256];
   UBYTE state = 0;
   UBYTE i = 0;
-  char c = 1;
-  while (c) {
-    if (!fileRead(config, &c, sizeof(c))) {
-      c = 0; // Force end
-    }
+  char c = 0;
+  do {
+    c = *contents++;
     if (c > FONTMAXCHAR) {
       c = 31;
     }
@@ -103,8 +108,7 @@ static UBYTE loadConfig(void) {
     } else {
       continue;
     }
-  }
-  fileClose(config);
+  } while (c);
   return 1;
 }
 
@@ -317,7 +321,6 @@ void genericCreate(void) {
   for (UBYTE i = 3; i < 32; ++i) {
     copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[i], 0x0000);
   }
-  loadBitmap();
 
   s_pListVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
@@ -357,7 +360,11 @@ void genericProcess(void) {
   keyProcess();
   joyProcess();
   timerProcess();
-  if (timerCheck(&s_ulTimer, 10)) {
+  static UBYTE s_ubInitialLoad = 0;
+  if (!s_ubInitialLoad) {
+    s_ubInitialLoad = 1;
+    loadBitmap();
+  } else if (timerCheck(&s_ulTimer, 10)) {
     // only check input every 10 frames
     if (keyCheck(KEY_ESCAPE)) {
       gameExit();
