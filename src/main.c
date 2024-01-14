@@ -28,7 +28,7 @@ static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListCopBlock;
 static tFont *s_pFont;
 
-static ULONG s_ulTimer = 0;
+static UBYTE s_ubTimer = 0;
 
 static UBYTE s_ubGameCount = 0;
 static UBYTE s_ubSelectedGame = 0;
@@ -384,20 +384,18 @@ void genericCreate(void) {
   }
   invertSelectedGameString();
 
-  timerCreate();
   viewLoad(s_pView);
 }
 
 void genericProcess(void) {
   keyProcess();
   joyProcess();
-  timerProcess();
   static UBYTE s_ubInitialLoad = 0;
   if (!s_ubInitialLoad) {
     s_ubInitialLoad = 1;
     loadBitmap();
-  } else if (timerCheck(&s_ulTimer, 10)) {
-    // only check input every 10 frames
+  } else if (s_ubTimer++ % 16 == 0) {
+    // only check input every 16 frames
     if (keyCheck(KEY_ESCAPE)) {
       gameExit();
     } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
