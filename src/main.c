@@ -305,7 +305,7 @@ static void loadPosition(void) {
   s_ubSelectedGame = 0;
   if (position[0] == ';') {
     for (UBYTE i = 1; i < 4; i++) {
-      if (position[i] < '0' || position[i] > '9') {
+      if (position[i] >= '0' && position[i] <= '9') {
         s_ubSelectedGame *= 10;
         s_ubSelectedGame += (position[i] - '0');
       } else {
