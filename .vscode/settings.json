@@ -8,6 +8,9 @@
     "amiga.rom-paths.A500": "${workspaceFolder}/amiga-os-130.rom",
     "C_Cpp.autocompleteAddParentheses": true,
     "files.associations": {
-        "simplebuffer.h": "c"
+        "simplebuffer.h": "c",
+        "state.h": "c",
+        "joy.h": "c",
+        "timer.h": "c"
     },
 }

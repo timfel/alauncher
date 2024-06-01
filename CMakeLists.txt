@@ -77,3 +77,9 @@ file(
   "Die Siedler\ndh0:DieSiedler/DieSiedler\nApidyaAudios.iff\n"
   "Workbench\nloadwb\ndefault\n"
 )
+
+file(
+  WRITE ${PROJECT_BINARY_DIR}/cdtvlauncher.script
+  ";001\n"
+  "loadwb\n"
+)

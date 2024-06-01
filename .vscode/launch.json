@@ -2,6 +2,15 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["--folder", "C:/Users/Tim Felgentreff/Downloads/Download/spiele", "--output", "xxx", "--command-template", "cd {reldir}; jst {basename}"],
+            "justMyCode": true
+        },
+        {
             "type": "amiga",
             "request": "launch",
             "name": "AROS",
