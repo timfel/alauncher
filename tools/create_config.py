@@ -22,13 +22,13 @@ if __name__ == "__main__":
             if file.lower().endswith(".slave"):
                 slave_files.append(os.path.join(root, file))
 
-    pics = os.path.join(args.output, "cdtvlauncher.pics")
+    pics = os.path.join(args.output, "acelauncher.pics")
     os.makedirs(pics, exist_ok=True)
 
     def ppname(name):
         return re.sub("(NTSC|PAL|CDTV|1MB|2MB| De)", "", re.sub(r"([a-z0-9&\+])([A-Z0-9&\+])", r"\1 \2", name)).strip()
 
-    with open(os.path.join(args.output, "cdtvlauncher.config"), "w") as f:
+    with open(os.path.join(args.output, "acelauncher.config"), "w") as f:
         for slave in slave_files:
             basename = os.path.basename(slave)
             name, _ = os.path.splitext(basename)
@@ -36,7 +36,7 @@ if __name__ == "__main__":
             name = ppname(name)
             f.write(f"{name}\n")
             f.write(args.command_template.format(relslave=relpath, reldir=os.path.dirname(relpath), basename=basename) + "\n")
-            f.write(f"sys:cdtvlauncher.pics/{name}.iff\n")
+            f.write(f"sys:acelauncher.pics/{name}.iff\n")
 
     for slave in slave_files:
         basename = os.path.basename(slave)

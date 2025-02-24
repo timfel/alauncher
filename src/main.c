@@ -3,12 +3,7 @@
 #include <ace/utils/font.h>
 #include <ace/managers/joy.h>
 #include <ace/managers/key.h>
-#include <ace/managers/state.h>
 #include <ace/managers/viewport/simplebuffer.h>
-#include <ace/utils/palette.h>
-#include <ace/utils/custom.h>
-#include <ace/managers/blit.h>
-#include <ace/macros.h>
 
 #include "stfont.h"
 
@@ -27,8 +22,6 @@ static tCopBlock *s_pListColorsBlock;
 static tCopBlock *s_pSelectedColorsBlock;
 static tCopBlock *s_pUnselectedColorsBlock;
 static tCopBlock *s_pPicColorsBlock;
-static tTextBitMap *s_pTextBitMap;
-static tFont *s_pFont;
 
 static UBYTE s_ubTimer = 0;
 
@@ -53,7 +46,8 @@ static UBYTE loadConfig(void) {
     gameExit();
     return 0;
   }
-  char *contents = memAllocFastClear(lSize + 1);
+  char *contentsAllocated = memAllocFastClear(lSize + 1);
+  char *contents = contentsAllocated;
   do {
      lSize -= fileRead(config, contents, lSize);
   } while (lSize > 0);
@@ -111,6 +105,7 @@ static UBYTE loadConfig(void) {
       continue;
     }
   } while (c);
+  memFree(contentsAllocated, lSize + 1);
   return 1;
 }
 
@@ -379,7 +374,6 @@ void genericCreate(void) {
     TAG_VPORT_BPP, 5,
     TAG_END
   );
-  s_pFont = fontCreateFromMem(S_PFONTDATA);
   s_pListBufferManager = simpleBufferCreate(0,
     TAG_SIMPLEBUFFER_VPORT, s_pListVPort,
     TAG_SIMPLEBUFFER_BITMAP_FLAGS, BMF_CLEAR | BMF_INTERLEAVED,
@@ -388,28 +382,31 @@ void genericCreate(void) {
     TAG_SIMPLEBUFFER_BOUND_HEIGHT, MAX(FONTHEIGHT * s_ubGameCount, 150),
     TAG_END
   );
-  s_pTextBitMap = fontCreateTextBitMap(320, FONTHEIGHT);
-
+  
   // at the end of the picture, set the first two colors to just black and FG
   s_pListColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 2, 254, s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight - 1);
   copMove(s_pListVPort->pView->pCopList, s_pListColorsBlock, &g_pCustom->color[0], 0x0000);
   copMove(s_pListVPort->pView->pCopList, s_pListColorsBlock, &g_pCustom->color[1], 0x0888);
-
+  
   // Setup block to change background color for selected element
   s_pSelectedColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 1, 0, 0);
   copMove(s_pListVPort->pView->pCopList, s_pSelectedColorsBlock, &g_pCustom->color[1], 0x0d00);
   s_pUnselectedColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 1, 0, 0);
   copMove(s_pListVPort->pView->pCopList, s_pUnselectedColorsBlock, &g_pCustom->color[1], 0x0888);
-
+  
   // at the top of the picture, set the first two colors to what they need to be
   s_pPicColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 2, 0, 0);
   copMove(s_pListVPort->pView->pCopList, s_pPicColorsBlock, &g_pCustom->color[0], s_pScreenshotVPort->pPalette[0]);
   copMove(s_pListVPort->pView->pCopList, s_pPicColorsBlock, &g_pCustom->color[1], s_pScreenshotVPort->pPalette[1]);
-
+  
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
+  tFont *pFont = fontCreateFromMem(S_PFONTDATA);
+  tTextBitMap *pTextBitMap = fontCreateTextBitMap(320, FONTHEIGHT);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
-    fontDrawStr(s_pFont, s_pListBufferManager->pBack, 0, i * FONTHEIGHT + 1, s_ppGameNames[i], 1, FONT_LEFT, s_pTextBitMap);
+    fontDrawStr(pFont, s_pListBufferManager->pBack, 0, i * FONTHEIGHT + 1, s_ppGameNames[i], 1, FONT_LEFT, pTextBitMap);
   }
+  fontDestroyTextBitMap(pTextBitMap);
+  fontDestroy(pFont);
   changeSelection();
 
   viewLoad(s_pView);
@@ -467,6 +464,11 @@ void genericProcess(void) {
 
 void genericDestroy(void) {
   timerDestroy();
+  copBlockDestroy(s_pView->pCopList, s_pListColorsBlock);
+  copBlockDestroy(s_pView->pCopList, s_pSelectedColorsBlock);
+  copBlockDestroy(s_pView->pCopList, s_pUnselectedColorsBlock);
+  copBlockDestroy(s_pView->pCopList, s_pPicColorsBlock);
+
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
     memFree(s_ppGameNames[i], strlen(s_ppGameNames[i]) + 1);
     memFree(s_ppGameCommandLines[i], strlen(s_ppGameCommandLines[i]) + 1);
@@ -476,7 +478,6 @@ void genericDestroy(void) {
   memFree(s_ppGameCommandLines, sizeof(char *) * s_ubGameCount);
   memFree(s_ppGameImages, sizeof(char *) * s_ubGameCount);
   viewDestroy(s_pView);
-  fontDestroy(s_pFont);
   keyDestroy(); // We don't need it anymore
   joyClose(); // We don't need it anymore
 }
