@@ -48,9 +48,9 @@ static UBYTE loadConfig(void) {
   }
   char *contentsAllocated = memAllocFastClear(lSize + 1);
   char *contents = contentsAllocated;
-  do {
-     lSize -= fileRead(config, contents, lSize);
-  } while (lSize > 0);
+  for (LONG i = lSize; i > 0;) {
+    i -= fileRead(config, contents, lSize);
+  }
   fileClose(config);
 
   char line[256];
@@ -132,10 +132,14 @@ typedef struct  __attribute__((__packed__)) {
 
 static UBYTE loadIlbm(const char *filename) {
   UBYTE retval = 0;
-  tFile *f = diskFileOpen(filename, "r");
+  tFile *f = NULL;
   char *chunk = NULL;
-  if (!f) {
+  if (!diskFileExists(filename)) {
     logWrite("Cannot open file: %s\n", filename);
+    goto error;
+  }
+  f = diskFileOpen(filename, "r");
+  if (!f) {
     goto error;
   }
   fileSeek(f, 0, SEEK_END);
@@ -231,7 +235,6 @@ static UBYTE loadIlbm(const char *filename) {
     offs += s_pScreenshotBufferManager->pBack->BytesPerRow;
   }
   retval = 1;
-
   error:
     if (f) {
       fileClose(f);
@@ -252,12 +255,12 @@ static void loadBitmap(void) {
       s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY,
       1);
     blitLine(s_pScreenshotBufferManager->pBack,
-      0, 0,
-      s_pScreenshotBufferManager->uBfrBounds.uwX, s_pScreenshotBufferManager->uBfrBounds.uwY,
+      1, 1,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
       0, 0xffff, 0);
     blitLine(s_pScreenshotBufferManager->pBack,
-      0, s_pScreenshotBufferManager->uBfrBounds.uwY,
-      s_pScreenshotBufferManager->uBfrBounds.uwX, 0,
+      1, s_pScreenshotBufferManager->uBfrBounds.uwY - 1,
+      s_pScreenshotBufferManager->uBfrBounds.uwX - 1, 1,
       0, 0xffff, 0);
   }
 }
@@ -421,9 +424,9 @@ void genericProcess(void) {
     loadBitmap();
   } else if (s_ubTimer++ % 16 == 0) {
     // only check input every 16 frames
-    if (keyCheck(KEY_ESCAPE)) {
+    if (keyUse(KEY_ESCAPE)) {
       gameExit();
-    } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
+    } else if (keyUse(KEY_RETURN) || keyUse(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
       tFile *f = diskFileOpen(SCRIPTNAME, "w");
       if (f) {
         fileWrite(f, ";", 1);
@@ -437,7 +440,7 @@ void genericProcess(void) {
         logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
       gameExit();
-    } else if (joyCheck(JOY1_UP)) {
+    } else if (keyUse(KEY_UP) || joyCheck(JOY1_UP)) {
       if (s_ubSelectedGame > 0) {
         s_ubSelectedGame--;
         if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
@@ -446,7 +449,7 @@ void genericProcess(void) {
         changeSelection();
         loadBitmap();
       }
-    } else if (joyCheck(JOY1_DOWN)) {
+    } else if (keyUse(KEY_DOWN) || joyCheck(JOY1_DOWN)) {
       if (s_ubSelectedGame < s_ubGameCount - 1) {
         s_ubSelectedGame++;
         if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
