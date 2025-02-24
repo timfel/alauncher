@@ -478,7 +478,7 @@ void genericProcess(void) {
     }
     if (keyUse(KEY_ESCAPE)) {
       gameExit();
-    } else if (keyUse(KEY_RETURN) || keyUse(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
+    } else if (keyUse(KEY_RETURN) || keyUse(KEY_NUMENTER) || joyUse(JOY1_FIRE) || joyUse(JOY2_FIRE)) {
       tFile *f = diskFileOpen(SCRIPTNAME, "w");
       if (f) {
         fileWrite(f, ";", 1);
@@ -492,14 +492,14 @@ void genericProcess(void) {
         logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
       gameExit();
-    } else if (keyUse(KEY_UP) || (s_ubTimer % 16 && joyCheck(JOY1_UP))) {
+    } else if (keyUse(KEY_UP) || joyUse(JOY1_UP)) {
       if (s_uwSelectedGame > 0) {
         changeSelection(s_uwSelectedGame - 1);
       } else {
         changeSelection(s_uwGameCount - 1);
       }
       s_ubFilterLen = 0;
-    } else if (keyUse(KEY_DOWN) || (s_ubTimer % 16 && joyCheck(JOY1_DOWN))) {
+    } else if (keyUse(KEY_DOWN) || joyUse(JOY1_DOWN)) {
       if (s_uwSelectedGame < s_uwGameCount - 1) {
         changeSelection(s_uwSelectedGame + 1);
       } else {
