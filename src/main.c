@@ -23,10 +23,32 @@ static tCopBlock *s_pSelectedColorsBlock;
 static tCopBlock *s_pUnselectedColorsBlock;
 static tCopBlock *s_pPicColorsBlock;
 
-static UBYTE s_ubTimer = 0;
+static UBYTE s_idxToKey[] = {
+  KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,
+  KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I, KEY_J,
+  KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T,
+  KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z, KEY_SPACE,
+};
+static UBYTE s_idxToLowerChar[] = {
+  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
+  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+  'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+  'u', 'v', 'w', 'x', 'y', 'z', ' ',
+};
+static UBYTE s_idxToUpperChar[] = {
+  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
+  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+  'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+  'U', 'V', 'W', 'X', 'Y', 'Z', ' ',
+};
 
-static UBYTE s_ubGameCount = 0;
-static UBYTE s_ubSelectedGame = 0;
+#define KEY_FILTER_COUNT 8
+static UBYTE s_ubFilterLen = 0;
+static UBYTE s_pFilterKeys[KEY_FILTER_COUNT] = {0};
+static UBYTE s_ubFilterResetTimer = 0;
+
+static UWORD s_uwGameCount = 0;
+static UWORD s_uwSelectedGame = 0;
 static char **s_ppGameNames;
 static char **s_ppGameCommandLines;
 static char **s_ppGameImages;
@@ -70,28 +92,28 @@ static UBYTE loadConfig(void) {
         if (line[0] == '#') {
           i = 0;
         } else if (state == 0) {
-          if (s_ubGameCount == 0) {
+          if (s_uwGameCount == 0) {
             s_ppGameNames = memAllocFast(sizeof(char *));
             s_ppGameCommandLines = memAllocFast(sizeof(char *));
             s_ppGameImages = memAllocFast(sizeof(char *));
           } else {
-            s_ppGameNames = (char**)memReallocFast((char*)s_ppGameNames, sizeof(char *) * s_ubGameCount, sizeof(char *) * (s_ubGameCount + 1));
-            s_ppGameCommandLines = (char**)memReallocFast((char*)s_ppGameCommandLines, sizeof(char *) * s_ubGameCount, sizeof(char *) * (s_ubGameCount + 1));
-            s_ppGameImages = (char**)memReallocFast((char*)s_ppGameImages, sizeof(char *) * s_ubGameCount, sizeof(char *) * (s_ubGameCount + 1));
+            s_ppGameNames = (char**)memReallocFast((char*)s_ppGameNames, sizeof(char *) * s_uwGameCount, sizeof(char *) * (s_uwGameCount + 1));
+            s_ppGameCommandLines = (char**)memReallocFast((char*)s_ppGameCommandLines, sizeof(char *) * s_uwGameCount, sizeof(char *) * (s_uwGameCount + 1));
+            s_ppGameImages = (char**)memReallocFast((char*)s_ppGameImages, sizeof(char *) * s_uwGameCount, sizeof(char *) * (s_uwGameCount + 1));
           }
-          s_ppGameNames[s_ubGameCount] = memAllocFast(sizeof(char) * (i + 1));
-          strcpy(s_ppGameNames[s_ubGameCount], line);
-          s_ubGameCount++;
+          s_ppGameNames[s_uwGameCount] = memAllocFast(sizeof(char) * (i + 1));
+          strcpy(s_ppGameNames[s_uwGameCount], line);
+          s_uwGameCount++;
           i = 0;
           state = 1;
         } else if (state == 1) {
-          s_ppGameCommandLines[s_ubGameCount - 1] = memAllocFast(sizeof(char) * (i + 1));
-          strcpy(s_ppGameCommandLines[s_ubGameCount - 1], line);
+          s_ppGameCommandLines[s_uwGameCount - 1] = memAllocFast(sizeof(char) * (i + 1));
+          strcpy(s_ppGameCommandLines[s_uwGameCount - 1], line);
           i = 0;
           state = 2;
         } else if (state == 2) {
-          s_ppGameImages[s_ubGameCount - 1] = memAllocFast(sizeof(char) * (i + 1));
-          strcpy(s_ppGameImages[s_ubGameCount - 1], line);
+          s_ppGameImages[s_uwGameCount - 1] = memAllocFast(sizeof(char) * (i + 1));
+          strcpy(s_ppGameImages[s_uwGameCount - 1], line);
           i = 0;
           state = 0;
         }
@@ -246,7 +268,7 @@ static UBYTE loadIlbm(const char *filename) {
 }
 
 static void loadBitmap(void) {
-  char *filename = s_ppGameImages[s_ubSelectedGame];
+  char *filename = s_ppGameImages[s_uwSelectedGame];
   if (loadIlbm(filename)) {
     // image loaded, all fine
   } else {
@@ -265,15 +287,28 @@ static void loadBitmap(void) {
   }
 }
 
-static void changeSelection(void) {
-  UWORD baseOffset = s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight + \
-      s_ubSelectedGame * FONTHEIGHT - s_pListBufferManager->pCamera->uPos.uwY;
+static void changeSelection(UWORD uwNewSelection) {
+  if (s_uwSelectedGame == uwNewSelection) {
+    return;
+  }
+  s_uwSelectedGame = uwNewSelection;
 
+  if (s_uwSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
+    cameraSetCoord(s_pListBufferManager->pCamera, 0, s_uwSelectedGame * FONTHEIGHT - s_pListVPort->uwHeight + FONTHEIGHT);
+  }
+  if (s_uwSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
+    cameraSetCoord(s_pListBufferManager->pCamera, 0, s_uwSelectedGame * FONTHEIGHT);
+  }
+
+  UWORD baseOffset = s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight + \
+      s_uwSelectedGame * FONTHEIGHT - s_pListBufferManager->pCamera->uPos.uwY;
   copBlockWait(s_pListVPort->pView->pCopList, s_pSelectedColorsBlock, 0, baseOffset);
   copBlockWait(s_pListVPort->pView->pCopList, s_pUnselectedColorsBlock, 0, baseOffset + FONTHEIGHT);
+
+  loadBitmap();
 }
 
-static void loadPosition(void) {
+static UWORD loadPosition(void) {
   tFile *f = diskFileOpen(SCRIPTNAME, "r");
   char position[4];
   memset(position, 0, sizeof(position));
@@ -290,20 +325,21 @@ static void loadPosition(void) {
     position[2] = '0';
     position[3] = '0';
   }
-  s_ubSelectedGame = 0;
+  UWORD uwPos = 0;
   if (position[0] == ';') {
     for (UBYTE i = 1; i < 4; i++) {
       if (position[i] >= '0' && position[i] <= '9') {
-        s_ubSelectedGame *= 10;
-        s_ubSelectedGame += (position[i] - '0');
+        uwPos *= 10;
+        uwPos += (position[i] - '0');
       } else {
         break;
       }
     }
-    if (s_ubSelectedGame >= s_ubGameCount) {
-      s_ubSelectedGame = 0;
+    if (uwPos >= s_uwGameCount) {
+      uwPos = 0;
     }
   }
+  return uwPos;
 }
 
 static tFont *fontCreateFromMem(const void *memory) {
@@ -340,7 +376,6 @@ void genericCreate(void) {
   if (!loadConfig()) {
     return;
   }
-  loadPosition();
 
   keyCreate(); // We'll use keyboard
   joyOpen(); // We'll use joystick
@@ -382,7 +417,7 @@ void genericCreate(void) {
     TAG_SIMPLEBUFFER_BITMAP_FLAGS, BMF_CLEAR | BMF_INTERLEAVED,
     TAG_SIMPLEBUFFER_IS_DBLBUF, 0,
     TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
-    TAG_SIMPLEBUFFER_BOUND_HEIGHT, MAX(FONTHEIGHT * s_ubGameCount, 150),
+    TAG_SIMPLEBUFFER_BOUND_HEIGHT, MAX(FONTHEIGHT * s_uwGameCount, 150),
     TAG_END
   );
   
@@ -405,12 +440,13 @@ void genericCreate(void) {
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
   tFont *pFont = fontCreateFromMem(S_PFONTDATA);
   tTextBitMap *pTextBitMap = fontCreateTextBitMap(320, FONTHEIGHT);
-  for (UBYTE i = 0; i < s_ubGameCount; i++) {
+  for (UBYTE i = 0; i < s_uwGameCount; i++) {
     fontDrawStr(pFont, s_pListBufferManager->pBack, 0, i * FONTHEIGHT + 1, s_ppGameNames[i], 1, FONT_LEFT, pTextBitMap);
   }
   fontDestroyTextBitMap(pTextBitMap);
   fontDestroy(pFont);
-  changeSelection();
+  s_uwSelectedGame = (UWORD)-1;
+  changeSelection(loadPosition());
 
   viewLoad(s_pView);
 }
@@ -422,42 +458,69 @@ void genericProcess(void) {
   if (!s_ubInitialLoad) {
     s_ubInitialLoad = 1;
     loadBitmap();
-  } else if (s_ubTimer++ % 16 == 0) {
-    // only check input every 16 frames
+  } else {
     if (keyUse(KEY_ESCAPE)) {
       gameExit();
     } else if (keyUse(KEY_RETURN) || keyUse(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
       tFile *f = diskFileOpen(SCRIPTNAME, "w");
       if (f) {
         fileWrite(f, ";", 1);
-        char buf[4];
-        sprintf(buf, "%d", s_ubSelectedGame);
+        char buf[8] = {0};
+        sprintf(buf, "%d", s_uwSelectedGame);
         fileWrite(f, buf, strlen(buf));
         fileWrite(f, "\n", 1);
-        fileWrite(f, s_ppGameCommandLines[s_ubSelectedGame], strlen(s_ppGameCommandLines[s_ubSelectedGame]));
+        fileWrite(f, s_ppGameCommandLines[s_uwSelectedGame], strlen(s_ppGameCommandLines[s_uwSelectedGame]));
         fileClose(f);
       } else {
         logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
       gameExit();
     } else if (keyUse(KEY_UP) || joyCheck(JOY1_UP)) {
-      if (s_ubSelectedGame > 0) {
-        s_ubSelectedGame--;
-        if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
-          cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
-        }
-        changeSelection();
-        loadBitmap();
+      if (s_uwSelectedGame > 0) {
+        changeSelection(s_uwSelectedGame - 1);
+      } else {
+        changeSelection(s_uwGameCount - 1);
       }
+      s_ubFilterLen = 0;
     } else if (keyUse(KEY_DOWN) || joyCheck(JOY1_DOWN)) {
-      if (s_ubSelectedGame < s_ubGameCount - 1) {
-        s_ubSelectedGame++;
-        if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
-          cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
-        }
-        changeSelection();
-        loadBitmap();
+      if (s_uwSelectedGame < s_uwGameCount - 1) {
+        changeSelection(s_uwSelectedGame + 1);
+      } else {
+        changeSelection(0);
       }
+      s_ubFilterLen = 0;
+    } else if (keyUse(KEY_BACKSPACE)) {
+      if (s_ubFilterLen) {
+        s_pFilterKeys[--s_ubFilterLen] = 0;
+      }
+    } else {
+      if (++s_ubFilterResetTimer == 0) {
+        s_ubFilterLen = 0;
+      }
+      for (UBYTE i = 0; i < sizeof(s_idxToKey); i++) {
+        if (s_ubFilterLen >= KEY_FILTER_COUNT) {
+          break;
+        }
+        if (keyUse(s_idxToKey[i])) {
+          s_ubFilterResetTimer = 0;
+          s_pFilterKeys[s_ubFilterLen++] = i;
+          UBYTE done = 0;
+          for (UBYTE j = 0; j < s_uwGameCount && !done; j++) {
+            for (UBYTE k = 0; k < s_ubFilterLen; k++) {
+              if (s_ppGameNames[j][k] == s_idxToLowerChar[s_pFilterKeys[k]] || s_ppGameNames[j][k] == s_idxToUpperChar[s_pFilterKeys[k]]) {
+                if (k == s_ubFilterLen - 1) {
+                  changeSelection(j);
+                  done = 1;
+                  break;
+                }
+              } else {
+                break;
+              }
+            }
+          }
+        }
+      }
+
     }
   }
   viewProcessManagers(s_pView);
@@ -472,14 +535,14 @@ void genericDestroy(void) {
   copBlockDestroy(s_pView->pCopList, s_pUnselectedColorsBlock);
   copBlockDestroy(s_pView->pCopList, s_pPicColorsBlock);
 
-  for (UBYTE i = 0; i < s_ubGameCount; i++) {
+  for (UBYTE i = 0; i < s_uwGameCount; i++) {
     memFree(s_ppGameNames[i], strlen(s_ppGameNames[i]) + 1);
     memFree(s_ppGameCommandLines[i], strlen(s_ppGameCommandLines[i]) + 1);
     memFree(s_ppGameImages[i], strlen(s_ppGameImages[i]) + 1);
   }
-  memFree(s_ppGameNames, sizeof(char *) * s_ubGameCount);
-  memFree(s_ppGameCommandLines, sizeof(char *) * s_ubGameCount);
-  memFree(s_ppGameImages, sizeof(char *) * s_ubGameCount);
+  memFree(s_ppGameNames, sizeof(char *) * s_uwGameCount);
+  memFree(s_ppGameCommandLines, sizeof(char *) * s_uwGameCount);
+  memFree(s_ppGameImages, sizeof(char *) * s_uwGameCount);
   viewDestroy(s_pView);
   keyDestroy(); // We don't need it anymore
   joyClose(); // We don't need it anymore
