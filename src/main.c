@@ -47,6 +47,7 @@ static UBYTE s_idxToUpperChar[] = {
 static UBYTE s_ubFilterLen = 0;
 static UBYTE s_pFilterKeys[KEY_FILTER_COUNT] = {0};
 static UBYTE s_ubFilterResetTimer = 0;
+static UBYTE s_ubReloadBitmap = 0;
 
 static UWORD s_uwGameCount = 0;
 static UWORD s_uwSelectedGame = 0;
@@ -314,7 +315,7 @@ static void changeSelection(UWORD uwNewSelection) {
   copBlockWait(s_pListVPort->pView->pCopList, s_pSelectedColorsBlock, 0, baseOffset);
   copBlockWait(s_pListVPort->pView->pCopList, s_pUnselectedColorsBlock, 0, baseOffset + FONTHEIGHT);
 
-  loadBitmap();
+  s_ubReloadBitmap = 15;
 }
 
 static UWORD loadPosition(void) {
@@ -468,6 +469,9 @@ void genericProcess(void) {
     s_ubInitialLoad = 1;
     loadBitmap();
   } else {
+    if (s_ubReloadBitmap && !(--s_ubReloadBitmap)) {
+      loadBitmap();
+    }
     if (keyUse(KEY_ESCAPE)) {
       gameExit();
     } else if (keyUse(KEY_RETURN) || keyUse(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
