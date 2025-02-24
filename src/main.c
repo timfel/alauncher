@@ -231,6 +231,9 @@ static UBYTE loadIlbm(const char *filename) {
     c4.blue = cr.blue >> 4;
     s_pScreenshotVPort->pPalette[i] = ((UWORD)c4.red << 8) | ((UWORD)c4.green << 4) | c4.blue;
   }
+  copSetMoveVal(&s_pPicColorsBlock->pCmds[0].sMove, s_pScreenshotVPort->pPalette[0]);
+  copSetMoveVal(&s_pPicColorsBlock->pCmds[1].sMove, s_pScreenshotVPort->pPalette[1]);
+  s_pView->pCopList->ubStatus |= STATUS_UPDATE;
   viewUpdateGlobalPalette(s_pScreenshotVPort->pView);
   if (size % 2 != 0) {
     chunk += 1; // skip pad byte for 16-bit alignment

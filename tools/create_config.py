@@ -79,9 +79,9 @@ if __name__ == "__main__":
             else:
                 continue
         image = Image.open(os.path.join(pics, f"{name}.png"))
-        if image.width > 320 or image.height > 256:
-            # resize keeping aspect ratio
-            image = image.resize((320, int(320 * image.height / image.width)), PIL.Image.Resampling.NEAREST)
+        if image.width > 320 or image.height > 140:
+            # resize to max 140 pixels of height, keeping aspect ratio
+            image = image.resize((int(140 * image.width / image.height), 140), PIL.Image.Resampling.NEAREST)
         try:
             image = image.quantize(32, method=Image.Quantize.MAXCOVERAGE, dither=Image.Dither.FLOYDSTEINBERG)
         except ValueError:
