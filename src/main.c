@@ -24,6 +24,9 @@ static tSimpleBufferManager *s_pScreenshotBufferManager;
 static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
 static tCopBlock *s_pListColorsBlock;
+static tCopBlock *s_pSelectedColorsBlock;
+static tCopBlock *s_pUnselectedColorsBlock;
+static tCopBlock *s_pPicColorsBlock;
 static tTextBitMap *s_pTextBitMap;
 static tFont *s_pFont;
 
@@ -264,8 +267,12 @@ static void loadBitmap(void) {
   }
 }
 
-static void invertSelectedGameString(void) {
-  fontDrawStr(s_pFont, s_pListBufferManager->pBack, 0, s_ubSelectedGame * FONTHEIGHT + 1, s_ppGameNames[s_ubSelectedGame], 2, FONT_LEFT, s_pTextBitMap);
+static void changeSelection(void) {
+  UWORD baseOffset = s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight + \
+      s_ubSelectedGame * FONTHEIGHT - s_pListBufferManager->pCamera->uPos.uwY;
+
+  copBlockWait(s_pListVPort->pView->pCopList, s_pSelectedColorsBlock, 0, baseOffset);
+  copBlockWait(s_pListVPort->pView->pCopList, s_pUnselectedColorsBlock, 0, baseOffset + FONTHEIGHT);
 }
 
 static void loadPosition(void) {
@@ -382,11 +389,28 @@ void genericCreate(void) {
     TAG_END
   );
   s_pTextBitMap = fontCreateTextBitMap(320, FONTHEIGHT);
+
+  // at the end of the picture, set the first two colors to just black and FG
+  s_pListColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 2, 254, s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight - 1);
+  copMove(s_pListVPort->pView->pCopList, s_pListColorsBlock, &g_pCustom->color[0], 0x0000);
+  copMove(s_pListVPort->pView->pCopList, s_pListColorsBlock, &g_pCustom->color[1], 0x0888);
+
+  // Setup block to change background color for selected element
+  s_pSelectedColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 1, 0, 0);
+  copMove(s_pListVPort->pView->pCopList, s_pSelectedColorsBlock, &g_pCustom->color[1], 0x0d00);
+  s_pUnselectedColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 1, 0, 0);
+  copMove(s_pListVPort->pView->pCopList, s_pUnselectedColorsBlock, &g_pCustom->color[1], 0x0888);
+
+  // at the top of the picture, set the first two colors to what they need to be
+  s_pPicColorsBlock = copBlockCreate(s_pListVPort->pView->pCopList, 2, 0, 0);
+  copMove(s_pListVPort->pView->pCopList, s_pPicColorsBlock, &g_pCustom->color[0], s_pScreenshotVPort->pPalette[0]);
+  copMove(s_pListVPort->pView->pCopList, s_pPicColorsBlock, &g_pCustom->color[1], s_pScreenshotVPort->pPalette[1]);
+
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
     fontDrawStr(s_pFont, s_pListBufferManager->pBack, 0, i * FONTHEIGHT + 1, s_ppGameNames[i], 1, FONT_LEFT, s_pTextBitMap);
   }
-  invertSelectedGameString();
+  changeSelection();
 
   viewLoad(s_pView);
 }
@@ -418,22 +442,20 @@ void genericProcess(void) {
       gameExit();
     } else if (joyCheck(JOY1_UP)) {
       if (s_ubSelectedGame > 0) {
-        invertSelectedGameString();
         s_ubSelectedGame--;
-        invertSelectedGameString();
         if (s_ubSelectedGame * FONTHEIGHT < s_pListBufferManager->pCamera->uPos.uwY) {
           cameraMoveBy(s_pListBufferManager->pCamera, 0, -FONTHEIGHT);
         }
+        changeSelection();
         loadBitmap();
       }
     } else if (joyCheck(JOY1_DOWN)) {
       if (s_ubSelectedGame < s_ubGameCount - 1) {
-        invertSelectedGameString();
         s_ubSelectedGame++;
-        invertSelectedGameString();
         if (s_ubSelectedGame * FONTHEIGHT + FONTHEIGHT >= s_pListBufferManager->pCamera->uPos.uwY + s_pListVPort->uwHeight) {
           cameraMoveBy(s_pListBufferManager->pCamera, 0, FONTHEIGHT);
         }
+        changeSelection();
         loadBitmap();
       }
     }
