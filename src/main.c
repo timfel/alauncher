@@ -43,6 +43,8 @@ static UBYTE s_idxToUpperChar[] = {
   'U', 'V', 'W', 'X', 'Y', 'Z', ' ',
 };
 
+static UBYTE s_ubTimer = 0;
+
 #define KEY_FILTER_COUNT 8
 static UBYTE s_ubFilterLen = 0;
 static UBYTE s_pFilterKeys[KEY_FILTER_COUNT] = {0};
@@ -255,9 +257,10 @@ static UBYTE loadIlbm(const char *filename) {
   width = (width + 7) / 8;
   UWORD paddingBytes = lineLength * 2 - width;
   
-  UWORD yOff = (s_pScreenshotBufferManager->uBfrBounds.uwY - height) / 2;
-  UWORD xOff = (s_pScreenshotBufferManager->uBfrBounds.uwX - width) / 2 / 16;
-  UWORD offs = yOff * s_pScreenshotBufferManager->pBack->BytesPerRow + xOff;
+  // UWORD yOff = (s_pScreenshotBufferManager->uBfrBounds.uwY - height) / 2;
+  // UWORD xOff = (s_pScreenshotBufferManager->uBfrBounds.uwX - width) / 2 / 16;
+  // UWORD offs = yOff * s_pScreenshotBufferManager->pBack->BytesPerRow + xOff;
+  UWORD offs = 0;
   
   for (UBYTE row = 0; row < height; row++) {
     for (UBYTE plane = 0; plane < bmhd.nPlanes; plane++) {
@@ -464,6 +467,7 @@ void genericCreate(void) {
 void genericProcess(void) {
   keyProcess();
   joyProcess();
+  ++s_ubTimer;
   static UBYTE s_ubInitialLoad = 0;
   if (!s_ubInitialLoad) {
     s_ubInitialLoad = 1;
@@ -488,14 +492,14 @@ void genericProcess(void) {
         logWrite("ERROR: Could not open " SCRIPTNAME " for writing.");
       }
       gameExit();
-    } else if (keyUse(KEY_UP) || joyCheck(JOY1_UP)) {
+    } else if (keyUse(KEY_UP) || (s_ubTimer % 16 && joyCheck(JOY1_UP))) {
       if (s_uwSelectedGame > 0) {
         changeSelection(s_uwSelectedGame - 1);
       } else {
         changeSelection(s_uwGameCount - 1);
       }
       s_ubFilterLen = 0;
-    } else if (keyUse(KEY_DOWN) || joyCheck(JOY1_DOWN)) {
+    } else if (keyUse(KEY_DOWN) || (s_ubTimer % 16 && joyCheck(JOY1_DOWN))) {
       if (s_uwSelectedGame < s_uwGameCount - 1) {
         changeSelection(s_uwSelectedGame + 1);
       } else {
