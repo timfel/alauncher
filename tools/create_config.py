@@ -1,15 +1,27 @@
-from argparse import ArgumentParser
+#!/usr/bin/env python3
+import duckduckgo_search
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from io import BytesIO
 import re
+import textwrap
 import struct
 from PIL import Image, ImagePalette
 import PIL
 import os
 import requests
-from bs4 import BeautifulSoup
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        formatter_class=RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(f"""
+    Example usage:
+
+    If you're using this on KS1.3 with e.g. JST to launch WHDLoad slaves:
+        {__file__} --folder ~/Download/Games --output ALauncher --command-template "cd {{reldir}}; c:jst {{basename}}"
+
+    Or with WHDLoad on KS 2+:
+        {__file__} --folder ~/Download/Games --output ALauncher --command-template "cd {{reldir}}; c:whdload {{basename}}"
+    """))
     parser.add_argument("--folder", type=str, required=True)
     parser.add_argument("--command-template", type=str, required=True)
     parser.add_argument("--output", type=str, required=True)
@@ -43,37 +55,37 @@ if __name__ == "__main__":
         name, _ = os.path.splitext(basename)
         name = ppname(name)
         print(name)
+        ddgs = duckduckgo_search.DDGS(proxy=os.environ.get("https_proxy"))
 
-        searchname = re.sub(r" ", r"%20", name)
         if not os.path.exists(os.path.join(pics, f"{name}.png")):
-            # convert camel case to spaces
-            # search google for an image for this game
-            url = f"https://www.google.com/search?q={searchname}+Amiga+Gameplay&tbm=isch"
-            headers = {
-                "User-Agent": "Dillo/3.0.5"
-            }
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            # find the first image
-            soup = BeautifulSoup(response.text, "html.parser")
-            try:
-                img = soup.find_all("img")[1]
-            except IndexError:
+            imgs = ddgs.images(keywords=f"{name} Amiga Gameplay Screenshot Ingame lemonamiga Hall of Light", size="Medium", layout="Wide")
+            for img in imgs:
+                if img["image"].endswith((".jpg", ".jpeg", ".png", ".gif")):
+                    try:
+                        response = requests.get(img["image"], timeout=5)
+                        response.raise_for_status()
+                        image = Image.open(BytesIO(response.content))
+                        image.show()
+                        print("Is this image good? (y/n)")
+                        if input().lower() == "y":
+                            image.save(os.path.join(pics, f"{name}.png"))
+                        else:
+                            continue
+                    except Exception:
+                        print(".. failed to download image", img["image"])
+                        continue
+                    else:
+                        break
+            else:
                 continue
-            src = img["src"]
-            # download the image, joining the img src with the base url if necessary
-            if src.startswith("/"):
-                src = f"https://www.google.com{src}"
-            response = requests.get(src)
-            response.raise_for_status()
-            # ensure the image is indexed to 32 amiga colors
-            image = Image.open(BytesIO(response.content))
-            image.save(os.path.join(pics, f"{name}.png"))
         image = Image.open(os.path.join(pics, f"{name}.png"))
         if image.width > 320 or image.height > 256:
             # resize keeping aspect ratio
             image = image.resize((320, int(320 * image.height / image.width)), PIL.Image.Resampling.NEAREST)
-        image = image.quantize(32, method=Image.Quantize.MAXCOVERAGE, dither=Image.Dither.NONE)
+        try:
+            image = image.quantize(32, method=Image.Quantize.MAXCOVERAGE, dither=Image.Dither.FLOYDSTEINBERG)
+        except ValueError:
+            image = image.quantize(32, dither=Image.Dither.FLOYDSTEINBERG)
         image.putpalette(ImagePalette.ImagePalette('RGB', [(b >> 4) | (b >> 4 << 4) for b in image.palette.getdata()[1]]))
         image.convert("RGB")
         image.save(os.path.join(pics, f"{name}.png"))
