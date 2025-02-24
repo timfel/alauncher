@@ -71,8 +71,12 @@ static UBYTE loadConfig(void) {
   }
   char *contentsAllocated = memAllocFastClear(lSize + 1);
   char *contents = contentsAllocated;
-  for (LONG i = lSize; i > 0;) {
-    i -= fileRead(config, contents, lSize);
+  for (LONG rem = lSize; rem > 0;) {
+    ULONG bytesRead = fileRead(config, contents + (lSize - rem), rem);
+    rem -= bytesRead;
+    if (!bytesRead) {
+      break;
+    }
   }
   fileClose(config);
 
