@@ -12,6 +12,7 @@
 #define FONTMINCHAR 31
 #define CONFIGFILE "acelauncher.config"
 #define SCRIPTNAME "acelauncher.script"
+#define BPP 5
 
 static tView *s_pView;
 static tVPort *s_pScreenshotVPort;
@@ -248,7 +249,11 @@ static UBYTE loadIlbm(const char *filename) {
   UWORD lineLength = (bmhd.w + 15) / 16;
   width = (width + 7) / 8;
   UWORD paddingBytes = lineLength * 2 - width;
-  UWORD offs = 0;
+  
+  UWORD yOff = (s_pScreenshotBufferManager->uBfrBounds.uwY - height) / 2;
+  UWORD xOff = (s_pScreenshotBufferManager->uBfrBounds.uwX - width) / 2 / 16;
+  UWORD offs = yOff * s_pScreenshotBufferManager->pBack->BytesPerRow + xOff;
+  
   for (UBYTE row = 0; row < height; row++) {
     for (UBYTE plane = 0; plane < bmhd.nPlanes; plane++) {
       memcpy(s_pScreenshotBufferManager->pBack->Planes[plane] + offs, chunk, width);
@@ -387,7 +392,7 @@ void genericCreate(void) {
 
   s_pScreenshotVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
-    TAG_VPORT_BPP, 5,
+    TAG_VPORT_BPP, BPP,
     TAG_VPORT_HEIGHT, 140,
     TAG_END
   );
@@ -409,7 +414,7 @@ void genericCreate(void) {
 
   s_pListVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
-    TAG_VPORT_BPP, 5,
+    TAG_VPORT_BPP, BPP,
     TAG_END
   );
   s_pListBufferManager = simpleBufferCreate(0,
