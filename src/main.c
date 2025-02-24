@@ -1,4 +1,5 @@
 #include <ace/generic/main.h>
+#include <ace/utils/disk_file.h>
 #include <ace/utils/font.h>
 #include <ace/managers/joy.h>
 #include <ace/managers/key.h>
@@ -14,18 +15,16 @@
 #define FONTHEIGHT 14
 #define FONTMAXCHAR 122
 #define FONTMINCHAR 31
-#define CONFIGFILE "cdtvlauncher.config"
-#define SCRIPTNAME "cdtvlauncher.script"
+#define CONFIGFILE "acelauncher.config"
+#define SCRIPTNAME "acelauncher.script"
 
 static tView *s_pView;
 static tVPort *s_pScreenshotVPort;
 static tSimpleBufferManager *s_pScreenshotBufferManager;
-static tCopBlock *s_pScreenshotCopBlock;
-static UBYTE s_screenshotCopBlockColor0;
-static tCopBlock *s_pOffCopBlock;
 static tVPort *s_pListVPort;
 static tSimpleBufferManager *s_pListBufferManager;
-static tCopBlock *s_pListCopBlock;
+static tCopBlock *s_pListColorsBlock;
+static tTextBitMap *s_pTextBitMap;
 static tFont *s_pFont;
 
 static UBYTE s_ubTimer = 0;
@@ -44,8 +43,8 @@ static char *memReallocFast(char *ptr, UWORD oldSize, UWORD size) {
 }
 
 static UBYTE loadConfig(void) {
-  LONG lSize = fileGetSize(CONFIGFILE);
-  tFile *config = fileOpen(CONFIGFILE, "r");
+  tFile *config = diskFileOpen(CONFIGFILE, "r");
+  LONG lSize = fileGetSize(config);
   if (!config || lSize < 0) {
     logWrite("Failed to open config file " CONFIGFILE "\n");
     gameExit();
@@ -135,7 +134,7 @@ typedef struct  __attribute__((__packed__)) {
 
 static UBYTE loadIlbm(const char *filename) {
   UBYTE retval = 0;
-  tFile *f = fileOpen(filename, "r");
+  tFile *f = diskFileOpen(filename, "r");
   char *chunk = NULL;
   if (!f) {
     logWrite("Cannot open file: %s\n", filename);
@@ -198,13 +197,9 @@ static UBYTE loadIlbm(const char *filename) {
     c4.red = cr.red >> 4;
     c4.green = cr.green >> 4;
     c4.blue = cr.blue >> 4;
-    copSetMoveVal(
-      &s_pScreenshotCopBlock->pCmds[s_screenshotCopBlockColor0 + i].sMove,
-      ((UWORD)c4.red << 8) | ((UWORD)c4.green << 4) | c4.blue
-    );
+    s_pScreenshotVPort->pPalette[i] = ((UWORD)c4.red << 8) | ((UWORD)c4.green << 4) | c4.blue;
   }
-  s_pScreenshotCopBlock->ubUpdated = 2;
-  s_pView->pCopList->ubStatus |= STATUS_UPDATE;
+  viewUpdateGlobalPalette(s_pScreenshotVPort->pView);
   if (size % 2 != 0) {
     chunk += 1; // skip pad byte for 16-bit alignment
   }
@@ -270,29 +265,17 @@ static void loadBitmap(void) {
 }
 
 static void invertSelectedGameString(void) {
-  UWORD uwBlitWords = s_pListBufferManager->uBfrBounds.uwX >> 4;
-	ULONG ulOffs = s_pListBufferManager->pBack->BytesPerRow * s_ubSelectedGame * FONTHEIGHT;
-  blitWait();
-  g_pCustom->bltcon0 = USEA|USED|0x0f; // invert A;
-  g_pCustom->bltcon1 = g_pCustom->bltamod = g_pCustom->bltdmod = 0;
-  g_pCustom->bltapt = g_pCustom->bltdpt = &s_pListBufferManager->pBack->Planes[0][ulOffs];
-  g_pCustom->bltsize = (FONTHEIGHT << HSIZEBITS) | uwBlitWords;
-}
-
-static void debugColor(USHORT color) {
-  s_pListCopBlock->pCmds[2].sMove.bfValue = color;
-  s_pListCopBlock->ubUpdated = 2;
-  s_pView->pCopList->ubStatus |= STATUS_UPDATE;
+  fontDrawStr(s_pFont, s_pListBufferManager->pBack, 0, s_ubSelectedGame * FONTHEIGHT + 1, s_ppGameNames[s_ubSelectedGame], 2, FONT_LEFT, s_pTextBitMap);
 }
 
 static void loadPosition(void) {
-  tFile *f = fileOpen(SCRIPTNAME, "r");
+  tFile *f = diskFileOpen(SCRIPTNAME, "r");
   char position[4];
   memset(position, 0, sizeof(position));
   if (f) {
     fileRead(f, position, 4);
     fileClose(f);
-    if ((f = fileOpen(SCRIPTNAME, "w"))) {
+    if ((f = diskFileOpen(SCRIPTNAME, "w"))) {
       // clear file
       fileClose(f);
     }
@@ -318,6 +301,36 @@ static void loadPosition(void) {
   }
 }
 
+static tFont *fontCreateFromMem(const void *memory) {
+  logBlockBegin("fontCreateFromMem(memory: %p)", memory);
+	tFont *pFont = (tFont *) memAllocFast(sizeof(tFont));
+	if (!pFont) {
+		return 0;
+	}
+
+  memcpy(&pFont->uwWidth, memory, sizeof(UWORD));
+  memory += sizeof(UWORD);
+  memcpy(&pFont->uwHeight, memory, sizeof(UWORD));
+  memory += sizeof(UWORD);
+  memcpy(&pFont->ubChars, memory, sizeof(UBYTE));
+  memory += sizeof(UBYTE);
+	logWrite(
+		"Addr: %p, data width: %upx, chars: %u, font height: %upx\n",
+		pFont, pFont->uwWidth, pFont->ubChars, pFont->uwHeight
+	);
+
+	pFont->pCharOffsets = memAllocFast(sizeof(UWORD) * pFont->ubChars);
+  memcpy(pFont->pCharOffsets, memory, sizeof(UWORD) * pFont->ubChars);
+  memory += sizeof(UWORD) * pFont->ubChars;
+
+	pFont->pRawData = bitmapCreate(pFont->uwWidth, pFont->uwHeight, 1, 0);
+	UWORD uwPlaneByteSize = ((pFont->uwWidth+15)/16) * 2 * pFont->uwHeight;
+  memcpy(pFont->pRawData->Planes[0], memory, uwPlaneByteSize);
+
+	logBlockEnd("fontCreateFromMem()");
+	return pFont;
+}
+
 void genericCreate(void) {
   if (!loadConfig()) {
     return;
@@ -328,8 +341,8 @@ void genericCreate(void) {
   joyOpen(); // We'll use joystick
 
   s_pView = viewCreate(0,
-    TAG_VIEW_COPLIST_MODE, COPPER_MODE_BLOCK,
     TAG_VIEW_WINDOW_HEIGHT, 200,
+    TAG_VIEW_GLOBAL_BPP, 1,
     TAG_END);
 
   s_pScreenshotVPort = vPortCreate(0,
@@ -345,42 +358,33 @@ void genericCreate(void) {
     TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
     TAG_END
   );
-  s_pScreenshotCopBlock = copBlockCreate(s_pView->pCopList, 33, 0, 0);
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->bplcon0, (s_pScreenshotVPort->ubBPP << 12) | BV(9));
-  s_screenshotCopBlockColor0 = s_pScreenshotCopBlock->uwCurrCount;
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[0], 0x0000);
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[1], 0x0888);
-  copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[2], 0x0800);
+
+  s_pScreenshotVPort->pPalette[0] = 0x0000;
+  s_pScreenshotVPort->pPalette[1] = 0x0888;
+  s_pScreenshotVPort->pPalette[2] = 0x0800;
   for (UBYTE i = 3; i < 32; ++i) {
-    copMove(s_pView->pCopList, s_pScreenshotCopBlock, &g_pCustom->color[i], 0x0000);
+    s_pScreenshotVPort->pPalette[i] = ((UWORD)i << 8) | (i << 4) | i;
   }
+  viewUpdateGlobalPalette(s_pScreenshotVPort->pView);
 
   s_pListVPort = vPortCreate(0,
     TAG_VPORT_VIEW, s_pView,
-    TAG_VPORT_BPP, 1,
+    TAG_VPORT_BPP, 5,
     TAG_END
   );
   s_pFont = fontCreateFromMem(S_PFONTDATA);
-  UWORD lineHeight = FONTHEIGHT;
   s_pListBufferManager = simpleBufferCreate(0,
     TAG_SIMPLEBUFFER_VPORT, s_pListVPort,
     TAG_SIMPLEBUFFER_BITMAP_FLAGS, BMF_CLEAR | BMF_INTERLEAVED,
     TAG_SIMPLEBUFFER_IS_DBLBUF, 0,
     TAG_SIMPLEBUFFER_USE_X_SCROLLING, 0,
-    TAG_SIMPLEBUFFER_BOUND_HEIGHT, MAX(lineHeight * s_ubGameCount, 150),
+    TAG_SIMPLEBUFFER_BOUND_HEIGHT, MAX(FONTHEIGHT * s_ubGameCount, 150),
     TAG_END
   );
+  s_pTextBitMap = fontCreateTextBitMap(320, FONTHEIGHT);
   cameraSetCoord(s_pListBufferManager->pCamera, 0, 0);
-  s_pOffCopBlock = copBlockCreate(s_pView->pCopList, 1, 0, s_pView->ubPosY + s_pScreenshotVPort->uwOffsY + s_pScreenshotVPort->uwHeight);
-  copMove(s_pView->pCopList, s_pOffCopBlock, &g_pCustom->dmacon, BV(8)); // disable bitplanes
-
-  s_pListCopBlock = copBlockCreate(s_pView->pCopList, 4, 0, s_pView->ubPosY + s_pListVPort->uwOffsY);
-  copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->dmacon, BV(15) | BV(8)); // enable bitplanes
-  copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->bplcon0, (s_pListVPort->ubBPP << 12) | BV(9));
-  copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[0], 0x0000);
-  copMove(s_pView->pCopList, s_pListCopBlock, &g_pCustom->color[1], 0x0800);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
-    fontDrawStr1bpp(s_pFont, s_pListBufferManager->pBack, 0, i * lineHeight + 1, s_ppGameNames[i]);
+    fontDrawStr(s_pFont, s_pListBufferManager->pBack, 0, i * FONTHEIGHT + 1, s_ppGameNames[i], 1, FONT_LEFT, s_pTextBitMap);
   }
   invertSelectedGameString();
 
@@ -399,7 +403,7 @@ void genericProcess(void) {
     if (keyCheck(KEY_ESCAPE)) {
       gameExit();
     } else if (keyCheck(KEY_RETURN) || keyCheck(KEY_NUMENTER) || joyCheck(JOY1_FIRE) || joyCheck(JOY2_FIRE)) {
-      tFile *f = fileOpen(SCRIPTNAME, "w");
+      tFile *f = diskFileOpen(SCRIPTNAME, "w");
       if (f) {
         fileWrite(f, ";", 1);
         char buf[4];
@@ -441,9 +445,6 @@ void genericProcess(void) {
 
 void genericDestroy(void) {
   timerDestroy();
-  copBlockDestroy(s_pView->pCopList, s_pScreenshotCopBlock);
-  copBlockDestroy(s_pView->pCopList, s_pListCopBlock);
-  copBlockDestroy(s_pView->pCopList, s_pOffCopBlock);
   for (UBYTE i = 0; i < s_ubGameCount; i++) {
     memFree(s_ppGameNames[i], strlen(s_ppGameNames[i]) + 1);
     memFree(s_ppGameCommandLines[i], strlen(s_ppGameCommandLines[i]) + 1);

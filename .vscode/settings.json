@@ -1,16 +1,3 @@
 {
-    "C_Cpp.files.exclude": {
-        "**/.vscode": true,
-        "**/.vs": true,
-        "**/.venv": true
-    },
-    "amiga.rom-paths.A1200": "${workspaceFolder}/amiga-os-310.rom",
-    "amiga.rom-paths.A500": "${workspaceFolder}/amiga-os-130.rom",
-    "C_Cpp.autocompleteAddParentheses": true,
-    "files.associations": {
-        "simplebuffer.h": "c",
-        "state.h": "c",
-        "joy.h": "c",
-        "timer.h": "c"
-    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

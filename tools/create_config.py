@@ -24,11 +24,16 @@ if __name__ == "__main__":
 
     pics = os.path.join(args.output, "cdtvlauncher.pics")
     os.makedirs(pics, exist_ok=True)
+
+    def ppname(name):
+        return re.sub("(NTSC|PAL|CDTV|1MB|2MB| De)", "", re.sub(r"([a-z0-9&\+])([A-Z0-9&\+])", r"\1 \2", name)).strip()
+
     with open(os.path.join(args.output, "cdtvlauncher.config"), "w") as f:
         for slave in slave_files:
             basename = os.path.basename(slave)
             name, _ = os.path.splitext(basename)
             relpath = os.path.relpath(slave, args.folder)
+            name = ppname(name)
             f.write(f"{name}\n")
             f.write(args.command_template.format(relslave=relpath, reldir=os.path.dirname(relpath), basename=basename) + "\n")
             f.write(f"sys:cdtvlauncher.pics/{name}.iff\n")
@@ -36,9 +41,10 @@ if __name__ == "__main__":
     for slave in slave_files:
         basename = os.path.basename(slave)
         name, _ = os.path.splitext(basename)
+        name = ppname(name)
         print(name)
 
-        searchname = re.sub(r"([a-z])([A-Z])", r"\1 \2", name)
+        searchname = re.sub(r" ", r"%20", name)
         if not os.path.exists(os.path.join(pics, f"{name}.png")):
             # convert camel case to spaces
             # search google for an image for this game

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.22)
 project(AceProject C)
 
 # Lowercase project name for binaries and packaging
@@ -37,18 +37,18 @@ if(ELF2HUNK)
     WRITE ${PROJECT_BINARY_DIR}/disassemble.cmake
     "EXECUTE_PROCESS(COMMAND ${OBJDUMP} --disassemble -S ${GAME_LINKED} OUTPUT_FILE ${TARGET_NAME}.s)"
   )
-  set(ADF_DIR "${CMAKE_CURRENT_BINARY_DIR}/adf")
-  add_custom_command(
-    TARGET ${GAME_LINKED} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} ARGS -P ${PROJECT_BINARY_DIR}/disassemble.cmake
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${ADF_DIR}/s"
-    COMMAND ${CMAKE_COMMAND} -E copy "${GAME_EXE}" "${ADF_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "cdtvlauncher.config" "${ADF_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "DieSiedler.iff" "${ADF_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E echo "${GAME_EXE}" > "${ADF_DIR}/s/startup-sequence"
-    COMMAND exe2adf -l ${CMAKE_PROJECT_NAME} -a "${CMAKE_PROJECT_NAME}.adf" -d "${ADF_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${ADF_DIR}"
-  )
+  # set(ADF_DIR "${CMAKE_CURRENT_BINARY_DIR}/adf")
+  # add_custom_command(
+  #   TARGET ${GAME_LINKED} POST_BUILD
+  #   COMMAND ${CMAKE_COMMAND} ARGS -P ${PROJECT_BINARY_DIR}/disassemble.cmake
+  #   COMMAND ${CMAKE_COMMAND} -E make_directory "${ADF_DIR}/s"
+  #   COMMAND ${CMAKE_COMMAND} -E copy "${GAME_EXE}" "${ADF_DIR}"
+  #   COMMAND ${CMAKE_COMMAND} -E copy "cdtvlauncher.config" "${ADF_DIR}"
+  #   COMMAND ${CMAKE_COMMAND} -E copy "DieSiedler.iff" "${ADF_DIR}"
+  #   COMMAND ${CMAKE_COMMAND} -E echo "${GAME_EXE}" > "${ADF_DIR}/s/startup-sequence"
+  #   COMMAND exe2adf -l ${CMAKE_PROJECT_NAME} -a "${CMAKE_PROJECT_NAME}.adf" -d "${ADF_DIR}"
+  #   COMMAND ${CMAKE_COMMAND} -E rm -rf "${ADF_DIR}"
+  # )
 else()
   # Just produce the executable with Bebbo compiler
   SET(GAME_LINKED ${TARGET_NAME})
@@ -73,13 +73,13 @@ bin2h(
 )
 
 file(
-  WRITE ${PROJECT_BINARY_DIR}/cdtvlauncher.config
+  WRITE ${PROJECT_BINARY_DIR}/acelauncher.config
   "Die Siedler\ndh0:DieSiedler/DieSiedler\nApidyaAudios.iff\n"
   "Workbench\nloadwb\ndefault\n"
 )
 
 file(
-  WRITE ${PROJECT_BINARY_DIR}/cdtvlauncher.script
+  WRITE ${PROJECT_BINARY_DIR}/acelauncher.script
   ";001\n"
   "loadwb\n"
 )
